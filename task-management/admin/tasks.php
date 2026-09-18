@@ -6,7 +6,7 @@ require_once '../includes/sidebar.php';
 
 $pdo = getDB();
 
-// Filters
+
 $search      = trim($_GET['search'] ?? '');
 $section     = $_GET['section'] ?? '';
 $user        = $_GET['user'] ?? '';
@@ -63,10 +63,7 @@ $sections  = $pdo->query("SELECT id, name FROM sections WHERE status='active' OR
 $users     = $pdo->query("SELECT id, name FROM users WHERE role='user' AND status='active' ORDER BY name")->fetchAll();
 $assigners = $pdo->query("SELECT id, name, role FROM users WHERE role IN ('admin','coordinator') AND status='active' ORDER BY role, name")->fetchAll();
 
-/**
- * Safe date formatter for this page.
- * Handles NULL, empty strings and MySQL zero-dates without printing junk.
- */
+
 if (!function_exists('taskDate')) {
     function taskDate($date, $format = 'd M Y') {
         if (empty($date) || $date === '0000-00-00' || $date === '0000-00-00 00:00:00') {
@@ -80,7 +77,7 @@ if (!function_exists('taskDate')) {
     }
 }
 
-/**
+
  * True when a task is past its due date and still open.
  */
 if (!function_exists('taskIsOverdue')) {
