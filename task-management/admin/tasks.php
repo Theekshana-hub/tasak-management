@@ -78,8 +78,7 @@ if (!function_exists('taskDate')) {
 }
 
 
- * True when a task is past its due date and still open.
- */
+
 if (!function_exists('taskIsOverdue')) {
     function taskIsOverdue($due_date, $status) {
         if (empty($due_date) || $due_date === '0000-00-00' || $due_date === '0000-00-00 00:00:00') {
