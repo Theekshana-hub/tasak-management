@@ -6,7 +6,7 @@ require_once '../includes/sidebar.php';
 
 $pdo = getDB();
 
-// Total stats
+
 $total_tasks = $pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
 $pending     = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'PENDING'")->fetchColumn();
 $in_progress = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'IN_PROGRESS'")->fetchColumn();
@@ -14,11 +14,11 @@ $completed   = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'COMPLETED
 $cancelled   = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'CANCELLED'")->fetchColumn();
 $total_users = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'user'")->fetchColumn();
 
-// Overdue
+
 $overdue_stmt = $pdo->query("SELECT COUNT(*) FROM tasks WHERE due_date < CURDATE() AND status NOT IN ('COMPLETED','CANCELLED')");
 $overdue = $overdue_stmt->fetchColumn();
 
-// Section statistics
+
 $section_stats = $pdo->query("
     SELECT s.name,
            COUNT(t.id) AS total,
@@ -32,7 +32,7 @@ $section_stats = $pdo->query("
     ORDER BY total DESC
 ")->fetchAll();
 
-// Recent tasks
+
 $recent_tasks = $pdo->query("
     SELECT t.*, u.name AS assigned_name, s.name AS section_name
     FROM tasks t
@@ -48,7 +48,7 @@ $recent_tasks = $pdo->query("
     <a href="create-task.php" class="btn btn-coral"><i class="bi bi-plus-lg"></i> Create Task</a>
 </div>
 
-<!-- Stats Cards -->
+
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-4 col-xl-2">
         <div class="card stat-card h-100">
@@ -169,7 +169,7 @@ $recent_tasks = $pdo->query("
         </div>
     </div>
 
-    <!-- Recent Tasks -->
+   
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between">

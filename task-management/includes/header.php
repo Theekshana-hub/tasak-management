@@ -53,7 +53,10 @@ if (isset($_SESSION['user_id'])) {
             margin-left: 260px;
             transition: margin-left 0.3s ease;
             min-height: 100vh;
-            padding-top: 70px; /* fixed navbar height */
+            /* Hardcoded 70px eka page ekakin ekak wenas wenna puluwan nisa,
+               navbar ekage niyama height eka JS ekenma set karana
+               --navbar-height variable eka use karanawa (fallback 70px) */
+            padding-top: var(--navbar-height, 70px);
         }
 
         .sidebar-overlay {
@@ -179,12 +182,25 @@ if (isset($_SESSION['user_id'])) {
         </div>
     </nav>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const sidebar   = document.getElementById('sidebar');
     const overlay   = document.getElementById('sidebarOverlay');
     const toggleBtn = document.getElementById('sidebarToggle');
+    const navbar    = document.querySelector('nav.navbar.fixed-top');
+
+    /* Navbar ekage niyama height eka #page-content padding-top ekata bind karanawa.
+       Notification badge, user name length, screen wrap wena widihata navbar height
+       page ekakin ekak wenas welath, content eka navbar ekata yatin adu wena / iwath
+       yana eka methanin nathi karanawa. */
+    function setNavbarHeight() {
+        if (navbar) {
+            document.documentElement.style.setProperty('--navbar-height', navbar.offsetHeight + 'px');
+        }
+    }
+    setNavbarHeight();
+    window.addEventListener('resize', setNavbarHeight);
+    window.addEventListener('load', setNavbarHeight);
 
     if (!sidebar || !toggleBtn) {
         console.warn('Sidebar or Toggle button not found');

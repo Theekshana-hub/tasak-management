@@ -1,21 +1,21 @@
 <?php
 $page_title = 'Notifications';
 
-// 1. Auth FIRST (no HTML yet)
-require_once '../includes/user_auth.php';  // හෝ admin_auth / coordinator_auth
+
+require_once '../includes/user_auth.php';  
 
 $pdo = getDB();
 $user_id = $_SESSION['user_id'];
 
-// 2. Redirect BEFORE header/sidebar
+
 if (isset($_GET['mark_all'])) {
     $stmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ?");
     $stmt->execute([$user_id]);
     setFlash('success', 'All notifications marked as read.');
-    redirect('notifications.php');  // ✅ HTML එකට කලින්
+    redirect('notifications.php');  
 }
 
-// 3. NOW load HTML
+
 require_once '../includes/header.php';
 require_once '../includes/sidebar.php';
 

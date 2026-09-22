@@ -23,7 +23,7 @@
     --transition: all 0.25s ease;
 }
 
-/* ---------- Base ---------- */
+
 * {
     box-sizing: border-box;
 }
@@ -32,7 +32,7 @@ body {
     background-color: var(--light-bg);
     font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     color: var(--text-main);
-    padding-top: 60px;
+
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
 }
