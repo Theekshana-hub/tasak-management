@@ -9,9 +9,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
 <div class="sidebar bg-navy text-white" id="sidebar">
     <div class="sidebar-header">
         <h5 class="mb-0">
-            <i class="bi bi-building"></i> Sipway Campus
+            <i class="bi bi-building"></i> Sipway Group of Companies
         </h5>
-        <small class="text-white-50">Task Management</small>
+        <small class="text-white-50">Task Management System</small>
 
         <?php if ($role === 'coordinator'): ?>
             <div class="mt-1">
