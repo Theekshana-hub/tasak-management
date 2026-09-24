@@ -37,8 +37,6 @@ foreach ($tasks as $t) {
 
     $start = !empty($t['start_date']) ? $t['start_date'] : date('Y-m-d');
     $days  = max(1, (int)($t['duration_days'] ?? 1));
-    $due   = !empty($t['due_date']) ? $t['due_date'] : date('Y-m-d', strtotime($start . ' + ' . ($days - 1) . ' days'));
-    if ($due < $start) $due = $start;
 
     $priority = $t['priority'] ?? 'MEDIUM';
     if (!in_array($priority, ['LOW', 'MEDIUM', 'HIGH', 'URGENT'])) {
@@ -50,7 +48,6 @@ foreach ($tasks as $t) {
         'description' => trim($t['description'] ?? ''),
         'priority'    => $priority,
         'start_date'  => $start,
-        'due_date'    => $due,
         'days'        => $days
     ];
 }
@@ -79,40 +76,51 @@ foreach ($assigned_to as $agent_id) {
     if (!$agent) continue;
 
     foreach ($clean_tasks as $task) {
-        $stmt = $pdo->prepare("
-            INSERT INTO tasks 
-                (title, description, section_id, assigned_to, created_by, priority, status, start_date, due_date, attachment) 
-            VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)
-        ");
-        $stmt->execute([
-            $task['title'],
-            $task['description'],
-            $section_id,
-            $agent_id,
-            $created_by,
-            $task['priority'],
-            $task['start_date'],
-            $task['due_date'],
-            $attachment
-        ]);
+        // Duration දවස් ගණනට එක එක daily task create කරනවා
+        // → Agent ට දවස් ගානේ complete කරන්න පුළුවන්
+        for ($i = 0; $i < $task['days']; $i++) {
+            $day_date = date('Y-m-d', strtotime($task['start_date'] . " +{$i} days"));
 
-        $task_id = $pdo->lastInsertId();
-        $extra = $task['days'] > 1 ? " (for {$task['days']} days)" : "";
-        logActivity($pdo, $task_id, $created_by, "Task assigned by Coordinator" . $extra);
-        createNotification(
-            $pdo,
-            $agent_id,
-            'New Task Assigned',
-            "You have been assigned: \"{$task['title']}\"" . $extra,
-            'task',
-            $task_id
-        );
-        $success_count++;
+            // Title එකේ day label එකක් (දවස් 1ට වඩා නම්)
+            $day_title = $task['title'];
+            if ($task['days'] > 1) {
+                $day_title = $task['title'] . ' (Day ' . ($i + 1) . '/' . $task['days'] . ' – ' . $day_date . ')';
+            }
+
+            $stmt = $pdo->prepare("
+                INSERT INTO tasks 
+                    (title, description, section_id, assigned_to, created_by, priority, status, start_date, due_date, attachment) 
+                VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)
+            ");
+            $stmt->execute([
+                $day_title,
+                $task['description'],
+                $section_id,
+                $agent_id,
+                $created_by,
+                $task['priority'],
+                $day_date,   // start = that day
+                $day_date,   // due   = that day (daily complete)
+                $attachment
+            ]);
+
+            $task_id = $pdo->lastInsertId();
+            logActivity($pdo, $task_id, $created_by, "Task assigned by Coordinator (Day " . ($i + 1) . "/{$task['days']})");
+            createNotification(
+                $pdo,
+                $agent_id,
+                'New Task Assigned',
+                "You have been assigned: \"{$day_title}\"",
+                'task',
+                $task_id
+            );
+            $success_count++;
+        }
     }
 }
 
 if ($success_count > 0) {
-    setFlash('success', "$success_count task(s) assigned successfully.");
+    setFlash('success', "$success_count task(s) assigned successfully. Agents can complete day by day.");
 } else {
     setFlash('danger', 'Could not assign tasks. Check selected agents.');
 }
