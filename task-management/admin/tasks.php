@@ -95,9 +95,29 @@ foreach ($all_tasks as $t) {
     }
 }
 
-$sections  = $pdo->query("SELECT id, name FROM sections WHERE status='active' ORDER BY name")->fetchAll();
-$users     = $pdo->query("SELECT id, name FROM users WHERE role='user' AND status='active' ORDER BY name")->fetchAll();
-$assigners = $pdo->query("SELECT id, name, role FROM users WHERE role IN ('admin','coordinator') AND status='active' ORDER BY role, name")->fetchAll();
+$sections = $pdo->query("SELECT id, name FROM sections WHERE status='active' ORDER BY name")->fetchAll();
+
+// Agents + section_id (JS filter එකට)
+$users = $pdo->query("SELECT id, name, section_id FROM users WHERE role='user' AND status='active' ORDER BY name")->fetchAll();
+
+// Admins + Coordinators, coordinator ට යටතේ තියෙන section ids
+$assigners_raw = $pdo->query("SELECT id, name, role FROM users WHERE role IN ('admin','coordinator') AND status='active' ORDER BY role, name")->fetchAll();
+$assigners = [];
+foreach ($assigners_raw as $a) {
+    $section_ids = [];
+    if ($a['role'] === 'coordinator') {
+        $st = $pdo->prepare("SELECT DISTINCT section_id FROM users WHERE coordinator_id = ? AND role = 'user' AND section_id IS NOT NULL");
+        $st->execute([$a['id']]);
+        $section_ids = array_map('intval', array_column($st->fetchAll(), 'section_id'));
+    }
+    // admin → හැම section එකටම (empty = all)
+    $assigners[] = [
+        'id'          => (int)$a['id'],
+        'name'        => $a['name'],
+        'role'        => $a['role'],
+        'section_ids' => $section_ids
+    ];
+}
 
 if (!function_exists('taskDate')) {
     function taskDate($date, $format = 'd M Y') {
@@ -237,7 +257,7 @@ $today = date('Y-m-d');
 <?php endif; ?>
 
 <!-- Filters -->
-<form method="GET" class="card border-0 shadow-sm mb-4">
+<form method="GET" class="card border-0 shadow-sm mb-4" id="filterForm">
     <div class="card-body">
         <?php if ($day_group !== ''): ?>
             <input type="hidden" name="day_group" value="<?php echo e($day_group); ?>">
@@ -247,7 +267,7 @@ $today = date('Y-m-d');
                 <input type="text" name="search" class="form-control" placeholder="Search tasks..." value="<?php echo e($search); ?>">
             </div>
             <div class="col-md-2">
-                <select name="section" class="form-select">
+                <select name="section" id="sectionFilter" class="form-select">
                     <option value="">All Sections</option>
                     <?php foreach ($sections as $s): ?>
                     <option value="<?php echo $s['id']; ?>" <?php echo $section == $s['id'] ? 'selected' : ''; ?>><?php echo e($s['name']); ?></option>
@@ -255,20 +275,31 @@ $today = date('Y-m-d');
                 </select>
             </div>
             <div class="col-md-2">
-                <select name="assigned_by" class="form-select">
+                <select name="assigned_by" id="assignedByFilter" class="form-select">
                     <option value="">Assigned By (All)</option>
                     <?php foreach ($assigners as $a): ?>
-                    <option value="<?php echo $a['id']; ?>" <?php echo $assigned_by == $a['id'] ? 'selected' : ''; ?>>
+                    <option
+                        value="<?php echo $a['id']; ?>"
+                        data-role="<?php echo e($a['role']); ?>"
+                        data-sections="<?php echo e(implode(',', $a['section_ids'])); ?>"
+                        <?php echo $assigned_by == $a['id'] ? 'selected' : ''; ?>
+                    >
                         <?php echo e($a['name']); ?> (<?php echo $a['role'] === 'admin' ? 'Admin' : 'Coordinator'; ?>)
                     </option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-md-2">
-                <select name="user" class="form-select">
+                <select name="user" id="agentFilter" class="form-select">
                     <option value="">All Agents</option>
                     <?php foreach ($users as $u): ?>
-                    <option value="<?php echo $u['id']; ?>" <?php echo $user == $u['id'] ? 'selected' : ''; ?>><?php echo e($u['name']); ?></option>
+                    <option
+                        value="<?php echo $u['id']; ?>"
+                        data-section="<?php echo (int)($u['section_id'] ?? 0); ?>"
+                        <?php echo $user == $u['id'] ? 'selected' : ''; ?>
+                    >
+                        <?php echo e($u['name']); ?>
+                    </option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -374,5 +405,64 @@ $today = date('Y-m-d');
         </table>
     </div>
 </div>
+
+<script>
+(function () {
+    const sectionFilter    = document.getElementById('sectionFilter');
+    const assignedByFilter = document.getElementById('assignedByFilter');
+    const agentFilter      = document.getElementById('agentFilter');
+
+    function filterDropdowns() {
+        const sectionId = sectionFilter.value; // '' = all
+
+        // --- Agents: ඒ section එකේ agents විතරක් ---
+        Array.from(agentFilter.options).forEach(function (opt, idx) {
+            if (idx === 0) { // "All Agents"
+                opt.hidden = false;
+                return;
+            }
+            const agentSection = opt.getAttribute('data-section') || '0';
+            if (!sectionId) {
+                opt.hidden = false;
+            } else {
+                opt.hidden = (agentSection !== sectionId && agentSection !== '0');
+            }
+        });
+        // selected agent hidden නම් reset
+        if (agentFilter.selectedOptions.length && agentFilter.selectedOptions[0].hidden) {
+            agentFilter.value = '';
+        }
+
+        // --- Assigned By: Admin හැමදාම + Coordinator ඒ section manage කරනවා නම් ---
+        Array.from(assignedByFilter.options).forEach(function (opt, idx) {
+            if (idx === 0) {
+                opt.hidden = false;
+                return;
+            }
+            const role = opt.getAttribute('data-role') || '';
+            const sectionsStr = opt.getAttribute('data-sections') || '';
+            const sections = sectionsStr ? sectionsStr.split(',').map(s => s.trim()) : [];
+
+            if (!sectionId) {
+                opt.hidden = false;
+                return;
+            }
+            if (role === 'admin') {
+                opt.hidden = false; // Admin always visible
+                return;
+            }
+            // Coordinator: ඒ section එක යටතේ agents තියෙනවා නම් පෙන්නන්න
+            opt.hidden = sections.indexOf(sectionId) === -1;
+        });
+        if (assignedByFilter.selectedOptions.length && assignedByFilter.selectedOptions[0].hidden) {
+            assignedByFilter.value = '';
+        }
+    }
+
+    sectionFilter.addEventListener('change', filterDropdowns);
+    // page load (GET section තියෙනවා නම්)
+    filterDropdowns();
+})();
+</script>
 
 <?php require_once '../includes/footer.php'; ?>

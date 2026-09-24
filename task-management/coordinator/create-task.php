@@ -7,11 +7,25 @@ require_once '../includes/sidebar.php';
 $pdo = getDB();
 $coord_id = $_SESSION['user_id'];
 
-$sections = $pdo->query("SELECT id, name FROM sections WHERE status = 'active' ORDER BY name")->fetchAll();
-
+// මේ coordinator ගේ agents විතරක්
 $stmt = $pdo->prepare("SELECT id, name, section_id FROM users WHERE coordinator_id = ? AND role = 'user' AND status = 'active' ORDER BY name");
 $stmt->execute([$coord_id]);
 $agents = $stmt->fetchAll();
+
+// Agents තියෙන sections විතරක් (හැම section එකක්ම නෙමෙයි)
+$section_ids = [];
+foreach ($agents as $a) {
+    if (!empty($a['section_id'])) {
+        $section_ids[(int)$a['section_id']] = true;
+    }
+}
+$sections = [];
+if (!empty($section_ids)) {
+    $placeholders = implode(',', array_fill(0, count($section_ids), '?'));
+    $st = $pdo->prepare("SELECT id, name FROM sections WHERE status = 'active' AND id IN ($placeholders) ORDER BY name");
+    $st->execute(array_keys($section_ids));
+    $sections = $st->fetchAll();
+}
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -25,11 +39,15 @@ $agents = $stmt->fetchAll();
             <div class="alert alert-warning">
                 You have no agents yet. <a href="add-agent.php">Add an Agent</a> first.
             </div>
+        <?php elseif (empty($sections)): ?>
+            <div class="alert alert-warning">
+                Your agents are not assigned to any section. Please set a section for agents first.
+            </div>
         <?php else: ?>
         <form method="POST" action="../actions/create-task-coord.php" enctype="multipart/form-data" id="taskForm">
             <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
 
-            <!-- Section + Agents -->
+            <!-- Section + Agents (අදාළ ඒවා විතරක්) -->
             <div class="row g-3 mb-4">
                 <div class="col-md-6">
                     <label class="form-label">Section <span class="text-danger">*</span></label>
@@ -39,6 +57,7 @@ $agents = $stmt->fetchAll();
                         <option value="<?php echo $s['id']; ?>"><?php echo e($s['name']); ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <small class="text-muted">Only sections where you have agents</small>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Assign to Agent(s) <span class="text-danger">*</span></label>
@@ -100,6 +119,7 @@ $agents = $stmt->fetchAll();
                                 <option value="7">7 Days (Week)</option>
                                 <option value="14">14 Days</option>
                             </select>
+                            <small class="text-muted">7 Days = daily tasks for agent</small>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">Due Date</label>
@@ -141,6 +161,7 @@ const addTaskBtn     = document.getElementById('addTaskBtn');
 
 let taskIndex = 0;
 
+if (sectionSelect) {
 sectionSelect.addEventListener('change', function () {
     const sectionId = this.value ? parseInt(this.value) : null;
     agentSelect.innerHTML = '';
@@ -152,7 +173,8 @@ sectionSelect.addEventListener('change', function () {
         return;
     }
 
-    const filtered = allAgents.filter(a => a.section_id === sectionId || a.section_id === null);
+    // ඒ section එකේ + මේ coordinator ගේ agents විතරක්
+    const filtered = allAgents.filter(a => a.section_id === sectionId);
 
     if (filtered.length === 0) {
         agentSelect.disabled = true;
@@ -170,6 +192,7 @@ sectionSelect.addEventListener('change', function () {
     });
     agentHint.innerHTML = filtered.length + ' agent(s). Hold <b>Ctrl</b> / <b>Cmd</b> to select multiple.';
 });
+}
 
 function calcDueDate(block) {
     const startInput = block.querySelector('.start-date');
@@ -188,13 +211,17 @@ function calcDueDate(block) {
 }
 
 function bindDateEvents(block) {
+    if (!block) return;
     block.querySelector('.start-date').addEventListener('change', () => calcDueDate(block));
     block.querySelector('.duration-days').addEventListener('change', () => calcDueDate(block));
     calcDueDate(block);
 }
 
-bindDateEvents(tasksContainer.querySelector('.task-block'));
+if (tasksContainer) {
+    bindDateEvents(tasksContainer.querySelector('.task-block'));
+}
 
+if (addTaskBtn) {
 addTaskBtn.addEventListener('click', function () {
     taskIndex++;
     const html = `
@@ -248,7 +275,9 @@ addTaskBtn.addEventListener('click', function () {
     bindDateEvents(newBlock);
     updateRemoveButtons();
 });
+}
 
+if (tasksContainer) {
 tasksContainer.addEventListener('click', function (e) {
     if (e.target.closest('.remove-task')) {
         e.target.closest('.task-block').remove();
@@ -256,6 +285,7 @@ tasksContainer.addEventListener('click', function (e) {
         updateRemoveButtons();
     }
 });
+}
 
 function updateRemoveButtons() {
     const blocks = tasksContainer.querySelectorAll('.task-block');
