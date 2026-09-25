@@ -19,6 +19,11 @@ function parseDayLabelDash($title) {
     return null;
 }
 
+// ----- Coordinator's own section -----
+$stmt = $pdo->prepare("SELECT section_id FROM users WHERE id = ?");
+$stmt->execute([$coord_id]);
+$coord_section_id = $stmt->fetchColumn();
+
 // ----- Overall stats -----
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE coordinator_id = ? AND role = 'user' AND status = 'active'");
 $stmt->execute([$coord_id]);
@@ -92,7 +97,7 @@ foreach ($today_tasks as $tt) {
     }
 }
 
-// ----- NEW: Section-wise Task Breakdown (TODAY ONLY, scoped to this coordinator's agents) -----
+// ----- Section-wise Task Breakdown (TODAY ONLY, scoped to coordinator's OWN section) -----
 $stmt = $pdo->prepare("
     SELECT
         s.id,
@@ -110,11 +115,12 @@ $stmt = $pdo->prepare("
         ON u.id = t.assigned_to
        AND u.coordinator_id = ?
     WHERE s.status = 'active'
+      AND s.id = ?
       AND (t.id IS NULL OR u.id IS NOT NULL)
     GROUP BY s.id, s.name
     ORDER BY s.name ASC
 ");
-$stmt->execute([$coord_id]);
+$stmt->execute([$coord_id, $coord_section_id]);
 $section_stats = $stmt->fetchAll();
 
 // Recent tasks
@@ -286,7 +292,7 @@ $agents = $stmt->fetchAll();
     </div>
 </div>
 
-<!-- ========== NEW: SECTION-WISE TASK BREAKDOWN (TODAY ONLY) ========== -->
+<!-- ========== SECTION-WISE TASK BREAKDOWN (TODAY ONLY, COORDINATOR'S OWN SECTION) ========== -->
 <div class="card border-0 shadow-sm mb-4 border-start border-4 border-info">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <span class="fw-semibold">
@@ -294,11 +300,11 @@ $agents = $stmt->fetchAll();
             Section-wise Task Breakdown
             <small class="text-muted fw-normal">(<?php echo date('d M Y'); ?>)</small>
         </span>
-        <span class="badge bg-info text-dark"><?php echo count($section_stats); ?> Sections</span>
+        <span class="badge bg-info text-dark"><?php echo count($section_stats); ?> Section<?php echo count($section_stats) === 1 ? '' : 's'; ?></span>
     </div>
     <div class="card-body">
         <?php if (empty($section_stats)): ?>
-            <p class="text-muted text-center mb-0 py-4">No sections found.</p>
+            <p class="text-muted text-center mb-0 py-4">No section found for your account.</p>
         <?php else: ?>
             <div class="row g-3">
                 <?php foreach ($section_stats as $sec):
