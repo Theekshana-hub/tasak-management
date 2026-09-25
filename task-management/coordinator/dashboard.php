@@ -92,6 +92,31 @@ foreach ($today_tasks as $tt) {
     }
 }
 
+// ----- NEW: Section-wise Task Breakdown (TODAY ONLY, scoped to this coordinator's agents) -----
+$stmt = $pdo->prepare("
+    SELECT
+        s.id,
+        s.name AS section_name,
+        COUNT(t.id) AS total_tasks,
+        SUM(CASE WHEN t.status = 'PENDING' THEN 1 ELSE 0 END) AS pending_count,
+        SUM(CASE WHEN t.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS progress_count,
+        SUM(CASE WHEN t.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_count,
+        SUM(CASE WHEN t.due_date < CURDATE() AND t.status NOT IN ('COMPLETED','CANCELLED') THEN 1 ELSE 0 END) AS overdue_count
+    FROM sections s
+    LEFT JOIN tasks t
+        ON t.section_id = s.id
+       AND (t.due_date = CURDATE() OR t.start_date = CURDATE())
+    LEFT JOIN users u
+        ON u.id = t.assigned_to
+       AND u.coordinator_id = ?
+    WHERE s.status = 'active'
+      AND (t.id IS NULL OR u.id IS NOT NULL)
+    GROUP BY s.id, s.name
+    ORDER BY s.name ASC
+");
+$stmt->execute([$coord_id]);
+$section_stats = $stmt->fetchAll();
+
 // Recent tasks
 $stmt = $pdo->prepare("
     SELECT t.*, u.name AS assigned_name, s.name AS section_name
@@ -185,7 +210,6 @@ $agents = $stmt->fetchAll();
         <a href="tasks.php" class="small">View All Tasks</a>
     </div>
     <div class="card-body">
-        <!-- Today mini stats -->
         <div class="row g-2 mb-3">
             <div class="col-6 col-md-3">
                 <div class="p-2 rounded bg-light text-center">
@@ -257,6 +281,86 @@ $agents = $stmt->fetchAll();
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- ========== NEW: SECTION-WISE TASK BREAKDOWN (TODAY ONLY) ========== -->
+<div class="card border-0 shadow-sm mb-4 border-start border-4 border-info">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+            <i class="bi bi-diagram-3 text-info"></i>
+            Section-wise Task Breakdown
+            <small class="text-muted fw-normal">(<?php echo date('d M Y'); ?>)</small>
+        </span>
+        <span class="badge bg-info text-dark"><?php echo count($section_stats); ?> Sections</span>
+    </div>
+    <div class="card-body">
+        <?php if (empty($section_stats)): ?>
+            <p class="text-muted text-center mb-0 py-4">No sections found.</p>
+        <?php else: ?>
+            <div class="row g-3">
+                <?php foreach ($section_stats as $sec):
+                    $secTotal     = (int)$sec['total_tasks'];
+                    $secPending   = (int)$sec['pending_count'];
+                    $secProgress  = (int)$sec['progress_count'];
+                    $secCompleted = (int)$sec['completed_count'];
+                    $secOverdue   = (int)$sec['overdue_count'];
+                    $pct = $secTotal > 0 ? round(($secCompleted / $secTotal) * 100) : 0;
+                ?>
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="card h-100 border">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="fw-bold mb-0"><?php echo e($sec['section_name']); ?></h6>
+                                <?php if ($secOverdue > 0): ?>
+                                    <span class="badge bg-danger"><?php echo $secOverdue; ?> overdue</span>
+                                <?php endif; ?>
+                            </div>
+                            <?php if ($secTotal === 0): ?>
+                                <p class="text-muted small mb-0 py-3 text-center">No tasks today.</p>
+                            <?php else: ?>
+                                <div class="d-flex justify-content-between small text-muted mb-1">
+                                    <span>Today's Progress</span>
+                                    <span><?php echo $secCompleted; ?> / <?php echo $secTotal; ?> (<?php echo $pct; ?>%)</span>
+                                </div>
+                                <div class="progress mb-3" style="height: 8px;">
+                                    <div class="progress-bar bg-success" role="progressbar"
+                                         style="width: <?php echo $pct; ?>%;"
+                                         aria-valuenow="<?php echo $pct; ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <div class="row g-2 text-center">
+                                    <div class="col-3">
+                                        <div class="p-1 rounded bg-light">
+                                            <div class="fw-bold"><?php echo $secTotal; ?></div>
+                                            <div class="small text-muted" style="font-size: 0.7rem;">Total</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="p-1 rounded bg-light">
+                                            <div class="fw-bold text-warning"><?php echo $secPending; ?></div>
+                                            <div class="small text-muted" style="font-size: 0.7rem;">Pending</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="p-1 rounded bg-light">
+                                            <div class="fw-bold text-primary"><?php echo $secProgress; ?></div>
+                                            <div class="small text-muted" style="font-size: 0.7rem;">Doing</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-3">
+                                        <div class="p-1 rounded bg-light">
+                                            <div class="fw-bold text-success"><?php echo $secCompleted; ?></div>
+                                            <div class="small text-muted" style="font-size: 0.7rem;">Done</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
             </div>
         <?php endif; ?>
     </div>

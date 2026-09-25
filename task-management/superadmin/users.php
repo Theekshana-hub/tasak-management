@@ -3,7 +3,7 @@ session_start();
 require_once '../config/database.php';
 require_once '../includes/functions.php';
 
-// Auth check
+
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'super_admin') {
     header('Location: ../login.php');
     exit;
@@ -15,13 +15,13 @@ require_once '../includes/sidebar.php';
 
 $pdo = getDB();
 
-// ===== Filters =====
+
 $search     = trim($_GET['search'] ?? '');
 $role       = $_GET['role'] ?? '';
 $status     = $_GET['status'] ?? '';
 $section_id = $_GET['section_id'] ?? '';
 
-// Build query
+
 $sql = "SELECT u.id, u.name, u.email, u.role, u.status, u.created_at, s.name AS section_name
         FROM users u
         LEFT JOIN sections s ON s.id = u.section_id

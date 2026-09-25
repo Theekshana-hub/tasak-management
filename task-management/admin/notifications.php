@@ -1,8 +1,7 @@
 <?php
 $page_title = 'Notifications';
 
-
-require_once '../includes/user_auth.php';  
+require_once '../includes/admin_auth.php'; 
 
 $pdo = getDB();
 $user_id = $_SESSION['user_id'];

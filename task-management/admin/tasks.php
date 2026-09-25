@@ -176,6 +176,32 @@ $today = date('Y-m-d');
     <a href="create-task.php" class="btn btn-coral"><i class="bi bi-plus-lg"></i> Create Task</a>
 </div>
 
+<?php if (isset($_GET['deleted'])): ?>
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+    Task deleted successfully.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+<?php elseif (isset($_GET['error'])): ?>
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <?php
+    switch ($_GET['error']) {
+        case 'not_found':
+            echo 'Task not found.';
+            break;
+        case 'delete_failed':
+            echo 'Could not delete task — it may have related records (comments, attachments, etc).';
+            break;
+        case 'invalid_id':
+            echo 'Invalid task ID.';
+            break;
+        default:
+            echo 'Something went wrong.';
+    }
+    ?>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+<?php endif; ?>
+
 <!-- Day Group Cards -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-2">
@@ -395,6 +421,12 @@ $today = date('Y-m-d');
                     <td>
                         <a href="task-details.php?id=<?php echo (int)$t['id']; ?>" class="btn btn-sm btn-outline-primary" title="View"><i class="bi bi-eye"></i></a>
                         <a href="edit-task.php?id=<?php echo (int)$t['id']; ?>" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+                        <a href="delete-task.php?id=<?php echo (int)$t['id']; ?>"
+                           class="btn btn-sm btn-outline-danger"
+                           title="Delete"
+                           onclick="return confirm('Delete this task? This cannot be undone.');">
+                           <i class="bi bi-trash"></i>
+                        </a>
                     </td>
                 </tr>
                 <?php endforeach; ?>

@@ -114,10 +114,11 @@ if (!empty($section_ids)) {
                             <label class="form-label">Duration</label>
                             <select name="tasks[0][duration_days]" class="form-select duration-days">
                                 <option value="1" selected>1 Day</option>
+                                <option value="2">2 Days</option>
                                 <option value="3">3 Days</option>
-                                <option value="5">5 Days</option>
                                 <option value="7">7 Days (Week)</option>
                                 <option value="14">14 Days</option>
+                                <option value="30">30 Days (Month)</option>
                             </select>
                             <small class="text-muted">7 Days = daily tasks for agent</small>
                         </div>
@@ -258,10 +259,11 @@ addTaskBtn.addEventListener('click', function () {
                 <label class="form-label">Duration</label>
                 <select name="tasks[${taskIndex}][duration_days]" class="form-select duration-days">
                     <option value="1" selected>1 Day</option>
+                    <option value="2">2 Days</option>
                     <option value="3">3 Days</option>
-                    <option value="5">5 Days</option>
                     <option value="7">7 Days (Week)</option>
                     <option value="14">14 Days</option>
+                    <option value="30">30 Days (Month)</option>
                 </select>
             </div>
             <div class="col-md-3">

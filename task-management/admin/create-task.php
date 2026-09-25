@@ -74,7 +74,7 @@ $assignees = $pdo->query("
                     </small>
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Priority <span class="text-danger">*</span></label>
                     <select name="priority" class="form-select" required>
                         <option value="LOW">Low</option>
@@ -84,14 +84,29 @@ $assignees = $pdo->query("
                     </select>
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Start Date</label>
-                    <input type="date" name="start_date" class="form-control" value="<?php echo date('Y-m-d'); ?>">
+                    <input type="date" name="start_date" id="startDate" class="form-control" value="<?php echo date('Y-m-d'); ?>">
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <label class="form-label">Duration</label>
+                    <select id="durationDays" class="form-select">
+                        <option value="1" selected>1 Day</option>
+                        <option value="2">2 Days</option>
+                        <option value="3">3 Days</option>
+                        <option value="7">7 Days (Week)</option>
+                        <option value="14">14 Days</option>
+                        <option value="30">30 Days (Month)</option>
+                        <option value="custom">Custom...</option>
+                    </select>
+                    <small class="text-muted">Auto-fills Due Date</small>
+                </div>
+
+                <div class="col-md-3">
                     <label class="form-label">Due Date</label>
-                    <input type="date" name="due_date" class="form-control">
+                    <input type="date" name="due_date" id="dueDate" class="form-control" readonly>
+                    <small class="text-muted d-none" id="customDueHint">Pick a custom due date above.</small>
                 </div>
 
                 <div class="col-12">
@@ -144,6 +159,39 @@ function filterAssignees() {
 
 sectionSelect.addEventListener('change', filterAssignees);
 roleFilter.addEventListener('change', filterAssignees);
+
+// ---- Duration -> Due Date auto calc ----
+const startDateInput   = document.getElementById('startDate');
+const durationSelect   = document.getElementById('durationDays');
+const dueDateInput     = document.getElementById('dueDate');
+const customDueHint    = document.getElementById('customDueHint');
+
+function calcDueDate() {
+    if (durationSelect.value === 'custom') {
+        dueDateInput.readOnly = false;
+        dueDateInput.value = '';
+        customDueHint.classList.remove('d-none');
+        return;
+    }
+
+    customDueHint.classList.add('d-none');
+    dueDateInput.readOnly = true;
+
+    if (!startDateInput.value) return;
+
+    const days = parseInt(durationSelect.value) || 1;
+    const d = new Date(startDateInput.value + 'T00:00:00');
+    d.setDate(d.getDate() + (days - 1));
+
+    const yyyy = d.getFullYear();
+    const mm   = String(d.getMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getDate()).padStart(2, '0');
+    dueDateInput.value = yyyy + '-' + mm + '-' + dd;
+}
+
+startDateInput.addEventListener('change', calcDueDate);
+durationSelect.addEventListener('change', calcDueDate);
+calcDueDate();
 </script>
 
 <?php require_once '../includes/footer.php'; ?>

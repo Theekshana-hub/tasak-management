@@ -6,7 +6,10 @@ require_once 'includes/functions.php';
 
 if (isset($_SESSION['user_id'])) {
     $role = $_SESSION['user_role'] ?? '';
-    if ($role === 'admin') {
+    
+    if ($role === 'super_admin') {
+        redirect('superadmin/dashboard.php');
+    } elseif ($role === 'admin') {
         redirect('admin/dashboard.php');
     } elseif ($role === 'coordinator') {
         redirect('coordinator/dashboard.php');
@@ -18,16 +21,16 @@ if (isset($_SESSION['user_id'])) {
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = trim($_POST['email'] ?? '');
+    $email    = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-    $csrf = $_POST['csrf_token'] ?? '';
+    $csrf     = $_POST['csrf_token'] ?? '';
 
     if (!verifyCSRFToken($csrf)) {
         $error = 'Invalid request. Please try again.';
     } elseif (empty($email) || empty($password)) {
         $error = 'Please enter both email and password.';
     } else {
-        $pdo = getDB();
+        $pdo  = getDB();
         $stmt = $pdo->prepare("SELECT id, name, email, password, role, status FROM users WHERE email = ? LIMIT 1");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
@@ -35,12 +38,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($user && $user['status'] === 'active' && password_verify($password, $user['password'])) {
             // Login success
             session_regenerate_id(true);
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['user_name'] = $user['name'];
+            $_SESSION['user_id']    = $user['id'];
+            $_SESSION['user_name']  = $user['name'];
             $_SESSION['user_email'] = $user['email'];
-            $_SESSION['user_role'] = $user['role'];
+            $_SESSION['user_role']  = $user['role'];
 
-            if ($user['role'] === 'admin') {
+            // Redirect based on role
+            if ($user['role'] === 'super_admin') {
+                redirect('superadmin/dashboard.php');
+            } elseif ($user['role'] === 'admin') {
                 redirect('admin/dashboard.php');
             } elseif ($user['role'] === 'coordinator') {
                 redirect('coordinator/dashboard.php');
@@ -48,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 redirect('user/dashboard.php');
             }
         } else {
+            // Login failed
             $error = 'Invalid email or password.';
         }
     }
@@ -102,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </form>
 
             <div class="mt-4 text-center small text-muted">
+                <p class="mb-1"><strong>Super Admin:</strong> superadmin@sipway.com / Super@123</p>
                 <p class="mb-1"><strong>Admin:</strong> admin@sipway.com / Admin@123</p>
                 <p class="mb-1"><strong>Coordinator:</strong> coord@sipway.com / Coord@123</p>
                 <p class="mb-0"><strong>Agent:</strong> agent@sipway.com / Agent@123</p>

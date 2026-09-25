@@ -23,7 +23,7 @@
     --transition: all 0.25s ease;
 }
 
-
+/* ---------- Base ---------- */
 * {
     box-sizing: border-box;
 }
@@ -32,7 +32,7 @@ body {
     background-color: var(--light-bg);
     font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     color: var(--text-main);
-
+    padding-top: 60px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
 }
@@ -711,4 +711,84 @@ h2 i {
     padding-top: 2.5rem !important;
     padding-bottom: 2.5rem !important;
     font-size: 0.95rem;
+}
+/* ===== Super Admin Dashboard Custom Styles ===== */
+
+:root {
+    --sa-primary: #0d6efd;
+    --sa-dark: #212529;
+    --sa-card-radius: 12px;
+    --sa-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --sa-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* Stat Cards */
+.stat-card {
+    border: none;
+    border-radius: var(--sa-card-radius);
+    box-shadow: var(--sa-shadow);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--sa-shadow-hover);
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+/* Quick Action Cards */
+.row.g-3 > .col-md-4 > a.card {
+    border-radius: var(--sa-card-radius);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    color: inherit;
+}
+
+.row.g-3 > .col-md-4 > a.card:hover {
+    transform: translateY(-6px);
+    box-shadow: var(--sa-shadow-hover) !important;
+}
+
+.row.g-3 > .col-md-4 > a.card .card-body {
+    transition: background-color 0.2s ease;
+}
+
+.row.g-3 > .col-md-4 > a.card:hover .card-body {
+    background-color: #f8f9fa;
+}
+
+/* Alert styling */
+.alert-dark {
+    border-radius: var(--sa-card-radius);
+    border: none;
+    box-shadow: var(--sa-shadow);
+}
+
+/* Page title */
+h2 {
+    font-weight: 700;
+    letter-spacing: -0.3px;
+}
+
+/* Responsive tweaks */
+@media (max-width: 576px) {
+    .stat-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+
+    .fs-4 {
+        font-size: 1.25rem !important;
+    }
 }

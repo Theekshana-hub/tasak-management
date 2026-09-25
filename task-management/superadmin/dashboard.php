@@ -5,7 +5,7 @@ require_once '../includes/header.php';
 require_once '../includes/sidebar.php';
 $pdo = getDB();
 $today = date('Y-m-d');
-// Helper: parse Day X/Y from title
+
 function parseDayLabelDash($title) {
     if (preg_match('/\(Day\s*(\d+)\s*\/\s*(\d+)\s*[–\-]\s*([^)]+)\)/i', $title ?? '', $m)) {
         return [
@@ -16,7 +16,7 @@ function parseDayLabelDash($title) {
     }
     return null;
 }
-// ===== Overall Stats =====
+
 $total_admins       = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
 $total_coordinators = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'coordinator'")->fetchColumn();
 $total_agents       = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'user'")->fetchColumn();
@@ -25,7 +25,7 @@ $pending            = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'PE
 $in_progress        = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'IN_PROGRESS'")->fetchColumn();
 $completed          = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'COMPLETED'")->fetchColumn();
 $overdue            = $pdo->query("SELECT COUNT(*) FROM tasks WHERE due_date < CURDATE() AND status NOT IN ('COMPLETED','CANCELLED')")->fetchColumn();
-// ===== TODAY's Tasks =====
+
 $today_tasks = $pdo->query("
     SELECT t.*, u.name AS assigned_name, s.name AS section_name
     FROM tasks t
@@ -43,7 +43,7 @@ foreach ($today_tasks as $tt) {
     elseif ($tt['status'] === 'IN_PROGRESS') $today_progress++;
     elseif ($tt['status'] === 'COMPLETED') $today_completed++;
 }
-// ===== OVERDUE Tasks =====
+
 $overdue_tasks = $pdo->query("
     SELECT t.*, u.name AS assigned_name, s.name AS section_name
     FROM tasks t
@@ -54,7 +54,7 @@ $overdue_tasks = $pdo->query("
     ORDER BY t.due_date ASC
     LIMIT 10
 ")->fetchAll();
-// ===== Recent Tasks =====
+
 $recent = $pdo->query("
     SELECT t.*, u.name AS assigned_name, s.name AS section_name
     FROM tasks t
@@ -63,7 +63,7 @@ $recent = $pdo->query("
     ORDER BY t.created_at DESC
     LIMIT 8
 ")->fetchAll();
-// ===== Recent Agents =====
+
 $agents = $pdo->query("
     SELECT u.*, 
            (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id AND t.status IN ('PENDING','IN_PROGRESS')) AS active_tasks
@@ -72,9 +72,7 @@ $agents = $pdo->query("
     ORDER BY u.created_at DESC
     LIMIT 6
 ")->fetchAll();
-// ===== Section-wise Breakdown (TODAY ONLY) =====
-// Join condition itself is restricted to today's tasks (due_date OR start_date = today),
-// so every count below reflects only today's tasks per section.
+
 $section_stats = $pdo->query("
     SELECT
         s.id,
@@ -91,19 +89,19 @@ $section_stats = $pdo->query("
     GROUP BY s.id, s.name
     ORDER BY s.name ASC
 ")->fetchAll();
-// ===== Section Daily Breakdown (Day 1/N, Day 2/N ...) =====
+
 $section_tasks_raw = $pdo->query("
     SELECT t.id, t.section_id, t.title, t.status, t.due_date, t.start_date
     FROM tasks t
     WHERE t.section_id IS NOT NULL
 ")->fetchAll();
-$section_days = []; // [section_id => [day_no => task_row]]
+$section_days = []; 
 foreach ($section_tasks_raw as $st) {
     $dayInfo = parseDayLabelDash($st['title'] ?? '');
     $dayNo   = $dayInfo ? $dayInfo['day'] : 1;
     $sid     = $st['section_id'];
     if (!isset($section_days[$sid])) $section_days[$sid] = [];
-    // If multiple tasks land on the same day number, keep the latest-updated one
+   
     $section_days[$sid][$dayNo] = [
         'status'   => $st['status'],
         'title'    => $dayInfo ? $dayInfo['base'] : ($st['title'] ?? ''),
@@ -114,7 +112,7 @@ foreach ($section_tasks_raw as $st) {
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0"><i class="bi bi-shield-lock"></i> Super Admin Dashboard</h2>
 </div>
-<!-- ===== Overall Stats ===== -->
+
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-4 col-xl-3">
         <div class="card stat-card h-100">
@@ -352,7 +350,7 @@ foreach ($section_tasks_raw as $st) {
         <?php endif; ?>
     </div>
 </div>
-<!-- ===== OVERDUE TASKS ===== -->
+
 <div class="card border-0 shadow-sm mb-4 border-start border-4 border-danger">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <span class="fw-semibold">
@@ -409,7 +407,7 @@ foreach ($section_tasks_raw as $st) {
     </div>
 </div>
 <div class="row g-4">
-    <!-- Recent Agents -->
+   
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between">
