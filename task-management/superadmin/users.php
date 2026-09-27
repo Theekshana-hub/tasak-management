@@ -21,7 +21,6 @@ $role       = $_GET['role'] ?? '';
 $status     = $_GET['status'] ?? '';
 $section_id = $_GET['section_id'] ?? '';
 
-
 $sql = "SELECT u.id, u.name, u.email, u.role, u.status, u.created_at, s.name AS section_name
         FROM users u
         LEFT JOIN sections s ON s.id = u.section_id

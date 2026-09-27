@@ -38,7 +38,8 @@ if (!empty($password) && $password !== $confirm) {
 
 $pdo = getDB();
 
-$stmt = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'admin'");
+// Allow both admin and super_admin
+$stmt = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role IN ('admin', 'super_admin')");
 $stmt->execute([$id]);
 if (!$stmt->fetch()) {
     setFlash('danger', 'Admin not found.');
@@ -63,4 +64,3 @@ if (!empty($password)) {
 
 setFlash('success', 'Admin updated successfully.');
 redirect('../superadmin/admins.php');
-?>

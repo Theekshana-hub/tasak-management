@@ -7,7 +7,9 @@ require_once '../includes/sidebar.php';
 $pdo = getDB();
 
 $search = trim($_GET['search'] ?? '');
-$sql = "SELECT u.* FROM users u WHERE u.role = 'admin'";
+
+// Show both admin and super_admin
+$sql = "SELECT u.* FROM users u WHERE u.role IN ('admin', 'super_admin')";
 $params = [];
 
 if ($search !== '') {
@@ -15,21 +17,26 @@ if ($search !== '') {
     $like = "%$search%";
     $params = [$like, $like, $like];
 }
-$sql .= " ORDER BY u.created_at DESC";
+$sql .= " ORDER BY u.role DESC, u.created_at DESC";  // Super Admins first
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $admins = $stmt->fetchAll();
 ?>
 <link rel="stylesheet" href="../assets/css/super-admin.css">
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0"><i class="bi bi-shield-lock"></i> Manage Admins</h2>
-    <a href="add-admin.php" class="btn btn-coral"><i class="bi bi-person-plus"></i> Add Admin</a>
+    <a href="add-admin.php" class="btn btn-coral">
+        <i class="bi bi-person-plus"></i> Add Admin / Super Admin
+    </a>
 </div>
 
 <form method="GET" class="row g-2 mb-3">
     <div class="col-md-4">
-        <input type="text" name="search" class="form-control" placeholder="Search name, email, phone..." value="<?php echo e($search); ?>">
+        <input type="text" name="search" class="form-control" 
+               placeholder="Search name, email, phone..." 
+               value="<?php echo e($search); ?>">
     </div>
     <div class="col-auto">
         <button type="submit" class="btn btn-navy bg-navy text-white">Search</button>
@@ -46,6 +53,7 @@ $admins = $stmt->fetchAll();
                     <th>Name</th>
                     <th>Email</th>
                     <th>Phone</th>
+                    <th>Role</th>
                     <th>Status</th>
                     <th>Created</th>
                     <th>Actions</th>
@@ -54,15 +62,22 @@ $admins = $stmt->fetchAll();
             <tbody>
                 <?php if (empty($admins)): ?>
                 <tr>
-                    <td colspan="7" class="text-center text-muted py-4">No admins found.</td>
+                    <td colspan="8" class="text-center text-muted py-4">No admins found.</td>
                 </tr>
                 <?php else: ?>
                     <?php foreach ($admins as $i => $u): ?>
                     <tr>
                         <td><?php echo $i + 1; ?></td>
-                        <td><?php echo e($u['name']); ?></td>
+                        <td class="fw-semibold"><?php echo e($u['name']); ?></td>
                         <td><?php echo e($u['email']); ?></td>
                         <td><?php echo e($u['phone'] ?? '-'); ?></td>
+                        <td>
+                            <?php if ($u['role'] === 'super_admin'): ?>
+                                <span class="badge bg-danger">Super Admin</span>
+                            <?php else: ?>
+                                <span class="badge bg-primary">Admin</span>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php if ($u['status'] === 'active'): ?>
                                 <span class="badge bg-success">Active</span>
@@ -72,14 +87,16 @@ $admins = $stmt->fetchAll();
                         </td>
                         <td><?php echo formatDate($u['created_at'] ?? ''); ?></td>
                         <td>
-                            <a href="edit-admin.php?id=<?php echo $u['id']; ?>" class="btn btn-sm btn-outline-primary" title="Edit">
+                            <a href="edit-admin.php?id=<?php echo $u['id']; ?>" 
+                               class="btn btn-sm btn-outline-primary" title="Edit">
                                 <i class="bi bi-pencil"></i>
                             </a>
+
                             <?php if ($u['id'] != $_SESSION['user_id']): ?>
                             <a href="../actions/delete-user.php?id=<?php echo $u['id']; ?>" 
                                class="btn btn-sm btn-outline-danger" 
                                title="Delete"
-                               onclick="return confirm('Are you sure you want to delete this admin?');">
+                               onclick="return confirm('Are you sure you want to delete this user?');">
                                 <i class="bi bi-trash"></i>
                             </a>
                             <?php endif; ?>
