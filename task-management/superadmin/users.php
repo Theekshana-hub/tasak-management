@@ -3,7 +3,6 @@ session_start();
 require_once '../config/database.php';
 require_once '../includes/functions.php';
 
-
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'super_admin') {
     header('Location: ../login.php');
     exit;
@@ -14,7 +13,6 @@ require_once '../includes/header.php';
 require_once '../includes/sidebar.php';
 
 $pdo = getDB();
-
 
 $search     = trim($_GET['search'] ?? '');
 $role       = $_GET['role'] ?? '';
@@ -66,7 +64,6 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="GET" class="row g-3 align-items-end">
-            <!-- Search -->
             <div class="col-md-3">
                 <label class="form-label small text-muted mb-1">Search</label>
                 <div class="input-group">
@@ -77,7 +74,6 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
                 </div>
             </div>
 
-            <!-- Role Filter -->
             <div class="col-md-2">
                 <label class="form-label small text-muted mb-1">Role</label>
                 <select name="role" class="form-select">
@@ -89,7 +85,6 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
                 </select>
             </div>
 
-            <!-- Status Filter -->
             <div class="col-md-2">
                 <label class="form-label small text-muted mb-1">Status</label>
                 <select name="status" class="form-select">
@@ -99,7 +94,6 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
                 </select>
             </div>
 
-            <!-- Section Filter -->
             <div class="col-md-2">
                 <label class="form-label small text-muted mb-1">Section</label>
                 <select name="section_id" class="form-select">
@@ -112,7 +106,6 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
                 </select>
             </div>
 
-            <!-- Buttons -->
             <div class="col-md-3">
                 <button type="submit" class="btn btn-primary me-2">
                     <i class="bi bi-funnel"></i> Filter
@@ -139,12 +132,13 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
                         <th>Role</th>
                         <th>Status</th>
                         <th>Created</th>
+                        <th style="width:140px">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($users)): ?>
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-5">
+                            <td colspan="8" class="text-center text-muted py-5">
                                 <i class="bi bi-people fs-1 d-block mb-2"></i>
                                 No users found
                             </td>
@@ -175,6 +169,32 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
                                     </span>
                                 </td>
                                 <td><?php echo date('Y-m-d', strtotime($u['created_at'])); ?></td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <!-- Edit Button -->
+                                        <a href="edit-user.php?id=<?php echo $u['id']; ?>" 
+                                           class="btn btn-sm btn-outline-primary" title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+
+                                        <!-- Delete Button (cannot delete yourself or other super_admins) -->
+                                        <?php if ($u['id'] != $_SESSION['user_id'] && $u['role'] !== 'super_admin'): ?>
+                                            <form method="POST" action="../actions/delete-user.php" 
+                                                  onsubmit="return confirm('Are you sure you want to delete this user?');" 
+                                                  class="d-inline">
+                                                <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
+                                                <input type="hidden" name="id" value="<?php echo $u['id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        <?php else: ?>
+                                            <button class="btn btn-sm btn-outline-secondary" disabled title="Cannot delete">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
