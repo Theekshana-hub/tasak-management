@@ -108,12 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </button>
             </form>
 
-            <div class="mt-4 text-center small text-muted">
-                <p class="mb-1"><strong>Super Admin:</strong> superadmin@sipway.com / Super@123</p>
-                <p class="mb-1"><strong>Admin:</strong> admin@sipway.com / Admin@123</p>
-                <p class="mb-1"><strong>Coordinator:</strong> coord@sipway.com / Coord@123</p>
-                <p class="mb-0"><strong>Agent:</strong> agent@sipway.com / Agent@123</p>
-            </div>
+         
         </div>
     </div>
 </div>
