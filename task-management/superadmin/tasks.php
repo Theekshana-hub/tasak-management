@@ -14,6 +14,8 @@ $status      = $_GET['status'] ?? '';
 $priority    = $_GET['priority'] ?? '';
 $day_group   = $_GET['day_group'] ?? '';
 
+$today = date('Y-m-d');
+
 function parseDayLabel($title) {
     if (preg_match('/\(Day\s*(\d+)\s*\/\s*(\d+)\s*[–\-]\s*([^)]+)\)/i', $title ?? '', $m)) {
         return [
@@ -56,17 +58,21 @@ if ($assigned_by !== '') {
     $sql .= " AND t.created_by = ?";
     $params[] = (int)$assigned_by;
 }
-if ($status !== '') {
+
+// ===== Status Filter (including Overdue) =====
+if ($status === 'OVERDUE') {
+    $sql .= " AND t.due_date < ? AND t.status NOT IN ('COMPLETED', 'CANCELLED')";
+    $params[] = $today;
+} elseif ($status !== '') {
     $sql .= " AND t.status = ?";
     $params[] = $status;
 }
+
 if ($priority !== '') {
     $sql .= " AND t.priority = ?";
     $params[] = $priority;
 }
 
-// Order by due date: tasks with a due date first (overdue/soonest at top),
-// tasks with no due date last, ties broken by newest first.
 $sql .= " ORDER BY (t.due_date IS NULL) ASC, t.due_date ASC, t.id DESC";
 
 $stmt = $pdo->prepare($sql);
@@ -99,10 +105,8 @@ foreach ($all_tasks as $t) {
 
 $sections = $pdo->query("SELECT id, name FROM sections WHERE status='active' ORDER BY name")->fetchAll();
 
-// Agents + section_id (JS filter එකට)
 $users = $pdo->query("SELECT id, name, section_id FROM users WHERE role='user' AND status='active' ORDER BY name")->fetchAll();
 
-// Admins + Coordinators, coordinator ට යටතේ තියෙන section ids
 $assigners_raw = $pdo->query("SELECT id, name, role FROM users WHERE role IN ('admin','coordinator') AND status='active' ORDER BY role, name")->fetchAll();
 $assigners = [];
 foreach ($assigners_raw as $a) {
@@ -112,7 +116,6 @@ foreach ($assigners_raw as $a) {
         $st->execute([$a['id']]);
         $section_ids = array_map('intval', array_column($st->fetchAll(), 'section_id'));
     }
-    // admin → හැම section එකටම (empty = all)
     $assigners[] = [
         'id'          => (int)$a['id'],
         'name'        => $a['name'],
@@ -158,8 +161,6 @@ function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $statu
     if ($priority !== '') $q['priority'] = $priority;
     return 'tasks.php' . ($q ? ('?' . http_build_query($q)) : '');
 }
-
-$today = date('Y-m-d');
 ?>
 
 <style>
@@ -334,18 +335,19 @@ $today = date('Y-m-d');
             <div class="col-md-1">
                 <select name="status" class="form-select">
                     <option value="">Status</option>
-                    <option value="PENDING" <?php echo $status==='PENDING'?'selected':''; ?>>Pending</option>
+                    <option value="PENDING"     <?php echo $status==='PENDING'?'selected':''; ?>>Pending</option>
                     <option value="IN_PROGRESS" <?php echo $status==='IN_PROGRESS'?'selected':''; ?>>In Progress</option>
-                    <option value="COMPLETED" <?php echo $status==='COMPLETED'?'selected':''; ?>>Completed</option>
-                    <option value="CANCELLED" <?php echo $status==='CANCELLED'?'selected':''; ?>>Cancelled</option>
+                    <option value="COMPLETED"   <?php echo $status==='COMPLETED'?'selected':''; ?>>Completed</option>
+                    <option value="CANCELLED"   <?php echo $status==='CANCELLED'?'selected':''; ?>>Cancelled</option>
+                    <option value="OVERDUE"     <?php echo $status==='OVERDUE'?'selected':''; ?>>Overdue</option>
                 </select>
             </div>
             <div class="col-md-1">
                 <select name="priority" class="form-select">
                     <option value="">Priority</option>
-                    <option value="LOW" <?php echo $priority==='LOW'?'selected':''; ?>>Low</option>
+                    <option value="LOW"    <?php echo $priority==='LOW'?'selected':''; ?>>Low</option>
                     <option value="MEDIUM" <?php echo $priority==='MEDIUM'?'selected':''; ?>>Medium</option>
-                    <option value="HIGH" <?php echo $priority==='HIGH'?'selected':''; ?>>High</option>
+                    <option value="HIGH"   <?php echo $priority==='HIGH'?'selected':''; ?>>High</option>
                     <option value="URGENT" <?php echo $priority==='URGENT'?'selected':''; ?>>Urgent</option>
                 </select>
             </div>
@@ -376,11 +378,11 @@ $today = date('Y-m-d');
             </thead>
             <tbody>
                 <?php foreach ($tasks as $t):
-                    $dayInfo = parseDayLabel($t['title'] ?? '');
-                    $overdue = taskIsOverdue($t['due_date'], $t['status']);
-                    $isToday = (!empty($t['due_date']) && $t['due_date'] === $today);
+                    $dayInfo   = parseDayLabel($t['title'] ?? '');
+                    $overdue   = taskIsOverdue($t['due_date'], $t['status']);
+                    $isToday   = (!empty($t['due_date']) && $t['due_date'] === $today);
                 ?>
-                <tr class="<?php echo $isToday ? 'table-warning' : ''; ?>">
+                <tr class="<?php echo $overdue ? 'table-danger' : ($isToday ? 'table-warning' : ''); ?>">
                     <td class="date-col"><?php echo taskDate($t['created_at'] ?? null); ?></td>
                     <td>
                         <a href="task-details.php?id=<?php echo (int)$t['id']; ?>" class="text-decoration-none fw-medium">
@@ -388,6 +390,9 @@ $today = date('Y-m-d');
                         </a>
                         <?php if ($isToday): ?>
                             <span class="badge bg-warning text-dark ms-1">Today</span>
+                        <?php endif; ?>
+                        <?php if ($overdue): ?>
+                            <span class="badge bg-danger ms-1">Overdue</span>
                         <?php endif; ?>
                     </td>
                     <td>
@@ -447,11 +452,10 @@ $today = date('Y-m-d');
     const agentFilter      = document.getElementById('agentFilter');
 
     function filterDropdowns() {
-        const sectionId = sectionFilter.value; // '' = all
+        const sectionId = sectionFilter.value;
 
-        // --- Agents: ඒ section එකේ agents විතරක් ---
         Array.from(agentFilter.options).forEach(function (opt, idx) {
-            if (idx === 0) { // "All Agents"
+            if (idx === 0) {
                 opt.hidden = false;
                 return;
             }
@@ -462,12 +466,10 @@ $today = date('Y-m-d');
                 opt.hidden = (agentSection !== sectionId && agentSection !== '0');
             }
         });
-        // selected agent hidden නම් reset
         if (agentFilter.selectedOptions.length && agentFilter.selectedOptions[0].hidden) {
             agentFilter.value = '';
         }
 
-        // --- Assigned By: Admin හැමදාම + Coordinator ඒ section manage කරනවා නම් ---
         Array.from(assignedByFilter.options).forEach(function (opt, idx) {
             if (idx === 0) {
                 opt.hidden = false;
@@ -482,10 +484,9 @@ $today = date('Y-m-d');
                 return;
             }
             if (role === 'admin') {
-                opt.hidden = false; // Admin always visible
+                opt.hidden = false;
                 return;
             }
-            // Coordinator: ඒ section එක යටතේ agents තියෙනවා නම් පෙන්නන්න
             opt.hidden = sections.indexOf(sectionId) === -1;
         });
         if (assignedByFilter.selectedOptions.length && assignedByFilter.selectedOptions[0].hidden) {
@@ -494,7 +495,6 @@ $today = date('Y-m-d');
     }
 
     sectionFilter.addEventListener('change', filterDropdowns);
-    // page load (GET section තියෙනවා නම්)
     filterDropdowns();
 })();
 </script>

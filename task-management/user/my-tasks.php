@@ -7,11 +7,13 @@ require_once '../includes/sidebar.php';
 $pdo = getDB();
 $user_id = $_SESSION['user_id'];
 
-$search   = trim($_GET['search'] ?? '');
-$status   = $_GET['status'] ?? '';
-$priority = $_GET['priority'] ?? '';
-$section  = $_GET['section'] ?? '';
-$day_group = $_GET['day_group'] ?? ''; // 1, 3, 5, 7, 14, or ''
+$search    = trim($_GET['search'] ?? '');
+$status    = $_GET['status'] ?? '';
+$priority  = $_GET['priority'] ?? '';
+$section   = $_GET['section'] ?? '';
+$day_group = $_GET['day_group'] ?? '';
+
+$today = date('Y-m-d');
 
 function parseDayLabel($title) {
     if (preg_match('/\(Day\s*(\d+)\s*\/\s*(\d+)\s*[–\-]\s*([^)]+)\)/i', $title ?? '', $m)) {
@@ -25,7 +27,6 @@ function parseDayLabel($title) {
     return null;
 }
 
-// All tasks for this user (filters except day_group)
 $sql = "SELECT t.*, 
                s.name AS section_name,
                c.name AS assigned_by_name,
@@ -42,10 +43,16 @@ if ($search !== '') {
     $params[] = $like;
     $params[] = $like;
 }
-if ($status !== '') {
+
+// ===== Status Filter (including Overdue) =====
+if ($status === 'OVERDUE') {
+    $sql .= " AND t.due_date < ? AND t.status NOT IN ('COMPLETED', 'CANCELLED')";
+    $params[] = $today;
+} elseif ($status !== '') {
     $sql .= " AND t.status = ?";
     $params[] = $status;
 }
+
 if ($priority !== '') {
     $sql .= " AND t.priority = ?";
     $params[] = $priority;
@@ -77,7 +84,6 @@ foreach ($all_tasks as $t) {
         $total_key = $total;
     }
 
-    // Filter
     if ($day_group === '') {
         $tasks[] = $t;
     } elseif ($day_group === 'other' && $total_key === 'other') {
@@ -88,16 +94,15 @@ foreach ($all_tasks as $t) {
 }
 
 $sections = $pdo->query("SELECT id, name FROM sections WHERE status='active' ORDER BY name")->fetchAll();
-$today = date('Y-m-d');
 
-// Helper for card link
 function dayGroupUrl($group, $search, $status, $priority, $section) {
-    $q = ['day_group' => $group];
+    $q = [];
+    if ($group !== '') $q['day_group'] = $group;
     if ($search !== '') $q['search'] = $search;
     if ($status !== '') $q['status'] = $status;
     if ($priority !== '') $q['priority'] = $priority;
     if ($section !== '') $q['section'] = $section;
-    return 'my-tasks.php?' . http_build_query($q);
+    return 'my-tasks.php' . ($q ? ('?' . http_build_query($q)) : '');
 }
 ?>
 
@@ -108,7 +113,7 @@ function dayGroupUrl($group, $search, $status, $priority, $section) {
 <!-- ========== Day Group Cards ========== -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-2">
-        <a href="my-tasks.php" class="text-decoration-none">
+        <a href="<?php echo e(dayGroupUrl('', $search, $status, $priority, $section)); ?>" class="text-decoration-none">
             <div class="card border-0 shadow-sm h-100 <?php echo $day_group===''?'border border-primary':''; ?>">
                 <div class="card-body text-center py-3">
                     <div class="fs-4 fw-bold text-dark"><?php echo count($all_tasks); ?></div>
@@ -198,17 +203,18 @@ function dayGroupUrl($group, $search, $status, $priority, $section) {
             <div class="col-md-2">
                 <select name="status" class="form-select">
                     <option value="">All Status</option>
-                    <option value="PENDING" <?php echo $status==='PENDING'?'selected':''; ?>>Pending</option>
+                    <option value="PENDING"     <?php echo $status==='PENDING'?'selected':''; ?>>Pending</option>
                     <option value="IN_PROGRESS" <?php echo $status==='IN_PROGRESS'?'selected':''; ?>>In Progress</option>
-                    <option value="COMPLETED" <?php echo $status==='COMPLETED'?'selected':''; ?>>Completed</option>
+                    <option value="COMPLETED"   <?php echo $status==='COMPLETED'?'selected':''; ?>>Completed</option>
+                    <option value="OVERDUE"     <?php echo $status==='OVERDUE'?'selected':''; ?>>Overdue</option>
                 </select>
             </div>
             <div class="col-md-2">
                 <select name="priority" class="form-select">
                     <option value="">All Priority</option>
-                    <option value="LOW" <?php echo $priority==='LOW'?'selected':''; ?>>Low</option>
+                    <option value="LOW"    <?php echo $priority==='LOW'?'selected':''; ?>>Low</option>
                     <option value="MEDIUM" <?php echo $priority==='MEDIUM'?'selected':''; ?>>Medium</option>
-                    <option value="HIGH" <?php echo $priority==='HIGH'?'selected':''; ?>>High</option>
+                    <option value="HIGH"   <?php echo $priority==='HIGH'?'selected':''; ?>>High</option>
                     <option value="URGENT" <?php echo $priority==='URGENT'?'selected':''; ?>>Urgent</option>
                 </select>
             </div>
@@ -216,7 +222,9 @@ function dayGroupUrl($group, $search, $status, $priority, $section) {
                 <select name="section" class="form-select">
                     <option value="">All Sections</option>
                     <?php foreach ($sections as $s): ?>
-                    <option value="<?php echo $s['id']; ?>" <?php echo $section==$s['id']?'selected':''; ?>><?php echo e($s['name']); ?></option>
+                    <option value="<?php echo $s['id']; ?>" <?php echo $section==$s['id']?'selected':''; ?>>
+                        <?php echo e($s['name']); ?>
+                    </option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -246,10 +254,11 @@ function dayGroupUrl($group, $search, $status, $priority, $section) {
             </thead>
             <tbody>
                 <?php foreach ($tasks as $t):
-                    $dayInfo = parseDayLabel($t['title'] ?? '');
-                    $isToday = (!empty($t['due_date']) && $t['due_date'] === $today);
+                    $dayInfo   = parseDayLabel($t['title'] ?? '');
+                    $isToday   = (!empty($t['due_date']) && $t['due_date'] === $today);
+                    $isOverdue = (!empty($t['due_date']) && $t['due_date'] < $today && !in_array($t['status'], ['COMPLETED', 'CANCELLED']));
                 ?>
-                <tr class="<?php echo $isToday ? 'table-warning' : ''; ?>">
+                <tr class="<?php echo $isOverdue ? 'table-danger' : ($isToday ? 'table-warning' : ''); ?>">
                     <td>
                         <?php echo !empty($t['created_at']) ? formatDate($t['created_at']) : '—'; ?>
                     </td>
@@ -259,6 +268,9 @@ function dayGroupUrl($group, $search, $status, $priority, $section) {
                         </a>
                         <?php if ($isToday): ?>
                             <span class="badge bg-warning text-dark ms-1">Today</span>
+                        <?php endif; ?>
+                        <?php if ($isOverdue): ?>
+                            <span class="badge bg-danger ms-1">Overdue</span>
                         <?php endif; ?>
                     </td>
                     <td>
@@ -281,7 +293,11 @@ function dayGroupUrl($group, $search, $status, $priority, $section) {
                         <?php endif; ?>
                     </td>
                     <td><?php echo priorityBadge($t['priority']); ?></td>
-                    <td><?php echo formatDate($t['due_date'] ?? $t['start_date'] ?? null); ?></td>
+                    <td>
+                        <span class="<?php echo $isOverdue ? 'text-danger fw-semibold' : ''; ?>">
+                            <?php echo formatDate($t['due_date'] ?? $t['start_date'] ?? null); ?>
+                        </span>
+                    </td>
                     <td><?php echo statusBadge($t['status'], $t['due_date']); ?></td>
                     <td>
                         <a href="task-details.php?id=<?php echo (int)$t['id']; ?>" class="btn btn-sm btn-outline-primary">View</a>
@@ -289,7 +305,9 @@ function dayGroupUrl($group, $search, $status, $priority, $section) {
                 </tr>
                 <?php endforeach; ?>
                 <?php if (empty($tasks)): ?>
-                <tr><td colspan="9" class="text-center text-muted py-4">No tasks found</td></tr>
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-4">No tasks found</td>
+                </tr>
                 <?php endif; ?>
             </tbody>
         </table>

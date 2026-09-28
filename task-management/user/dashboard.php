@@ -91,44 +91,54 @@ $recent = $stmt->fetchAll();
 <!-- Overall Stats -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-4 col-xl">
-        <div class="card stat-card h-100">
-            <div class="card-body">
-                <div class="text-muted small">My Tasks</div>
-                <div class="fs-3 fw-bold"><?php echo $total; ?></div>
+        <a href="my-tasks.php" class="text-decoration-none text-dark">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">My Tasks</div>
+                    <div class="fs-3 fw-bold"><?php echo $total; ?></div>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-6 col-md-4 col-xl">
-        <div class="card stat-card h-100">
-            <div class="card-body">
-                <div class="text-muted small">Pending</div>
-                <div class="fs-3 fw-bold text-warning"><?php echo $pending; ?></div>
+        <a href="my-tasks.php?status=PENDING" class="text-decoration-none text-dark">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Pending</div>
+                    <div class="fs-3 fw-bold text-warning"><?php echo $pending; ?></div>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-6 col-md-4 col-xl">
-        <div class="card stat-card h-100">
-            <div class="card-body">
-                <div class="text-muted small">In Progress</div>
-                <div class="fs-3 fw-bold text-primary"><?php echo $in_progress; ?></div>
+        <a href="my-tasks.php?status=IN_PROGRESS" class="text-decoration-none text-dark">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">In Progress</div>
+                    <div class="fs-3 fw-bold text-primary"><?php echo $in_progress; ?></div>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-6 col-md-4 col-xl">
-        <div class="card stat-card h-100">
-            <div class="card-body">
-                <div class="text-muted small">Completed</div>
-                <div class="fs-3 fw-bold text-success"><?php echo $completed; ?></div>
+        <a href="my-tasks.php?status=COMPLETED" class="text-decoration-none text-dark">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Completed</div>
+                    <div class="fs-3 fw-bold text-success"><?php echo $completed; ?></div>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-6 col-md-4 col-xl">
-        <div class="card stat-card h-100">
-            <div class="card-body">
-                <div class="text-muted small">Overdue</div>
-                <div class="fs-3 fw-bold text-danger"><?php echo $overdue; ?></div>
+        <a href="my-tasks.php?status=OVERDUE" class="text-decoration-none text-dark">
+            <div class="card stat-card h-100 <?php echo $overdue > 0 ? 'border border-danger' : ''; ?>">
+                <div class="card-body">
+                    <div class="text-muted small">Overdue</div>
+                    <div class="fs-3 fw-bold text-danger"><?php echo $overdue; ?></div>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
 </div>
 
@@ -227,7 +237,7 @@ $recent = $stmt->fetchAll();
         <a href="my-tasks.php" class="small">View All</a>
     </div>
     <div class="table-responsive">
-        <table class="table table-hover mb-0">
+        <table class="table table-hover mb-0 align-middle">
             <thead>
                 <tr>
                     <th>Task</th>
@@ -241,11 +251,21 @@ $recent = $stmt->fetchAll();
             </thead>
             <tbody>
                 <?php foreach ($recent as $t):
-                    $dayInfo = parseDayLabelUser($t['title'] ?? '');
+                    $dayInfo   = parseDayLabelUser($t['title'] ?? '');
+                    $isOverdue = (!empty($t['due_date']) && $t['due_date'] < $today && !in_array($t['status'], ['COMPLETED', 'CANCELLED']));
+                    $isToday   = (!empty($t['due_date']) && $t['due_date'] === $today);
                 ?>
-                <tr>
+                <tr class="<?php echo $isOverdue ? 'table-danger' : ($isToday ? 'table-warning' : ''); ?>">
                     <td>
-                        <?php echo e($dayInfo ? $dayInfo['base'] : $t['title']); ?>
+                        <a href="task-details.php?id=<?php echo (int)$t['id']; ?>" class="text-decoration-none fw-semibold">
+                            <?php echo e($dayInfo ? $dayInfo['base'] : $t['title']); ?>
+                        </a>
+                        <?php if ($isToday): ?>
+                            <span class="badge bg-warning text-dark ms-1">Today</span>
+                        <?php endif; ?>
+                        <?php if ($isOverdue): ?>
+                            <span class="badge bg-danger ms-1">Overdue</span>
+                        <?php endif; ?>
                     </td>
                     <td>
                         <?php if ($dayInfo): ?>
@@ -256,7 +276,11 @@ $recent = $stmt->fetchAll();
                     </td>
                     <td><?php echo e($t['section_name']); ?></td>
                     <td><?php echo priorityBadge($t['priority']); ?></td>
-                    <td><?php echo formatDate($t['due_date']); ?></td>
+                    <td>
+                        <span class="<?php echo $isOverdue ? 'text-danger fw-semibold' : ''; ?>">
+                            <?php echo formatDate($t['due_date']); ?>
+                        </span>
+                    </td>
                     <td><?php echo statusBadge($t['status'], $t['due_date']); ?></td>
                     <td>
                         <a href="task-details.php?id=<?php echo (int)$t['id']; ?>" class="btn btn-sm btn-outline-primary">View</a>
@@ -264,7 +288,9 @@ $recent = $stmt->fetchAll();
                 </tr>
                 <?php endforeach; ?>
                 <?php if (empty($recent)): ?>
-                <tr><td colspan="7" class="text-center text-muted py-4">No tasks assigned to you yet.</td></tr>
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">No tasks assigned to you yet.</td>
+                </tr>
                 <?php endif; ?>
             </tbody>
         </table>
