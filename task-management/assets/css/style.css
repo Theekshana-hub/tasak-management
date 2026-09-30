@@ -37,6 +37,10 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+body.sidebar-open {
+    overflow: hidden;
+}
+
 a {
     text-decoration: none;
     transition: var(--transition);
@@ -106,6 +110,22 @@ a {
     padding: 0.25em 0.5em;
 }
 
+/* Mobile sidebar toggle button */
+#sidebarToggle {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.35);
+    color: #fff;
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.65rem;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: var(--transition);
+}
+#sidebarToggle:hover {
+    background: rgba(255,255,255,0.12);
+}
+
 /* ---------- Sidebar ---------- */
 .sidebar {
     width: var(--sidebar-width);
@@ -170,11 +190,18 @@ a {
     color: #fecaca !important;
 }
 
+/* Sidebar overlay (mobile only) */
+.sidebar-overlay {
+    display: none;
+}
+
 /* ---------- Page Content ---------- */
 #page-content {
     min-height: calc(100vh - 60px);
     overflow-x: hidden;
     background: var(--light-bg);
+    min-width: 0;
+    flex: 1 1 auto;
 }
 
 .container-fluid {
@@ -272,6 +299,7 @@ h2 i {
     align-items: center;
     justify-content: center;
     font-size: 1.35rem;
+    flex-shrink: 0;
 }
 
 /* ---------- Tables ---------- */
@@ -659,21 +687,51 @@ h2 i {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 991.98px) {
+
+    /* Sidebar becomes an off-canvas drawer */
     .sidebar {
-        position: fixed;
-        left: -280px;
-        z-index: 1040;
-        transition: left 0.3s ease;
-        height: 100vh;
+        display: block !important;        /* beats Bootstrap d-none */
+        position: fixed !important;
         top: 0;
-        padding-top: 60px;
-    }
-    .sidebar.show {
         left: 0;
+        height: 100vh;
+        min-height: 100vh;
+        width: var(--sidebar-width);
+        max-width: 85vw;
+        padding-top: 60px;
+        overflow-y: auto;
+        z-index: 1045;                    /* above navbar (1030) */
+        transform: translateX(-100%);
+        visibility: hidden;
+        transition: transform 0.3s ease, visibility 0.3s ease;
     }
+
+    .sidebar.show {
+        transform: translateX(0);
+        visibility: visible;
+    }
+
+    /* Dark backdrop behind the drawer */
+    .sidebar-overlay {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 36, 64, 0.55);
+        z-index: 1044;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+
+    .sidebar-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
     #page-content {
         width: 100%;
     }
+
     .container-fluid {
         padding: 1.25rem !important;
     }
@@ -712,6 +770,7 @@ h2 i {
     padding-bottom: 2.5rem !important;
     font-size: 0.95rem;
 }
+
 /* ===== Super Admin Dashboard Custom Styles ===== */
 
 :root {
@@ -720,31 +779,6 @@ h2 i {
     --sa-card-radius: 12px;
     --sa-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     --sa-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-/* Stat Cards */
-.stat-card {
-    border: none;
-    border-radius: var(--sa-card-radius);
-    box-shadow: var(--sa-shadow);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    overflow: hidden;
-}
-
-.stat-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--sa-shadow-hover);
-}
-
-.stat-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.4rem;
-    flex-shrink: 0;
 }
 
 /* Quick Action Cards */
@@ -774,13 +808,6 @@ h2 i {
     box-shadow: var(--sa-shadow);
 }
 
-/* Page title */
-h2 {
-    font-weight: 700;
-    letter-spacing: -0.3px;
-}
-
-/* Responsive tweaks */
 @media (max-width: 576px) {
     .stat-icon {
         width: 40px;
