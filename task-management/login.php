@@ -3,7 +3,7 @@ session_start();
 require_once 'config/database.php';
 require_once 'includes/functions.php';
 
-
+// If already logged in → redirect based on role
 if (isset($_SESSION['user_id'])) {
     $role = $_SESSION['user_role'] ?? '';
     
@@ -108,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </button>
             </form>
 
-         
+          
         </div>
     </div>
 </div>
