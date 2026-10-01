@@ -32,7 +32,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
     <ul class="nav flex-column">
         <?php if ($role === 'super_admin'): ?>
-            <!-- ========== SUPER ADMIN MENU ========== -->
+            <!-- ========== SUPER ADMIN / MANAGING DIRECTOR MENU ========== -->
             <li class="nav-item">
                 <a class="nav-link <?php echo $current_page == 'dashboard.php' ? 'active' : ''; ?>" href="dashboard.php">
                     <i class="bi bi-speedometer2"></i> Dashboard
@@ -54,6 +54,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link <?php echo in_array($current_page, ['my-tasks.php','my-task-details.php']) ? 'active' : ''; ?>" href="my-tasks.php">
+                    <i class="bi bi-person-check"></i> My Tasks
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link <?php echo in_array($current_page, ['tasks.php','create-task.php','edit-task.php','task-details.php']) ? 'active' : ''; ?>" href="tasks.php">
                     <i class="bi bi-list-task"></i> All Tasks
                 </a>
@@ -70,7 +75,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             </li>
 
         <?php elseif ($role === 'admin'): ?>
-            <!-- ========== ADMIN MENU ========== -->
+            <!-- ========== ADMIN / MANAGEMENT MENU ========== -->
             <li class="nav-item">
                 <a class="nav-link <?php echo $current_page == 'dashboard.php' ? 'active' : ''; ?>" href="dashboard.php">
                     <i class="bi bi-speedometer2"></i> Dashboard
@@ -84,6 +89,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <li class="nav-item">
                 <a class="nav-link <?php echo in_array($current_page, ['sections.php','add-section.php','edit-section.php']) ? 'active' : ''; ?>" href="sections.php">
                     <i class="bi bi-diagram-3"></i> Sections
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link <?php echo in_array($current_page, ['my-tasks.php','my-task-details.php']) ? 'active' : ''; ?>" href="my-tasks.php">
+                    <i class="bi bi-person-check"></i> My Tasks
                 </a>
             </li>
             <li class="nav-item">
@@ -113,7 +123,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             </li>
 
         <?php elseif ($role === 'coordinator'): ?>
-            <!-- ========== COORDINATOR MENU ========== -->
+            <!-- ========== COORDINATOR / EXECUTIVE MENU ========== -->
             <li class="nav-item">
                 <a class="nav-link <?php echo $current_page == 'dashboard.php' ? 'active' : ''; ?>" href="dashboard.php">
                     <i class="bi bi-speedometer2"></i> Dashboard
@@ -151,7 +161,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             </li>
 
         <?php else: ?>
-            
+            <!-- ========== AGENT / ASSISTANT MENU ========== -->
             <li class="nav-item">
                 <a class="nav-link <?php echo $current_page == 'dashboard.php' ? 'active' : ''; ?>" href="dashboard.php">
                     <i class="bi bi-speedometer2"></i> Dashboard

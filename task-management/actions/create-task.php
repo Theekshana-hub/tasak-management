@@ -3,41 +3,116 @@ session_start();
 require_once '../config/database.php';
 require_once '../includes/functions.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
+$role = $_SESSION['user_role'] ?? '';
+
+// Allow admin, super_admin OR user (agent - self assign only)
+if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin', 'user'], true)) {
     setFlash('danger', 'Access denied.');
     redirect('../login.php');
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !verifyCSRFToken($_POST['csrf_token'] ?? '')) {
-    setFlash('danger', 'Invalid request.');
-    redirect('../admin/create-task.php');
+$is_self_only = ($role === 'user'); // Agents can ONLY assign to themselves
+
+// Redirect paths based on role
+// NOTE: 'user' folder name eka oyage project eke agent folder ekata maru karanna
+if ($role === 'super_admin') {
+    $back_create = '../superadmin/create-task.php';
+    $back_tasks  = '../superadmin/tasks.php';
+} elseif ($role === 'admin') {
+    $back_create = '../admin/create-task.php';
+    $back_tasks  = '../admin/tasks.php';
+} else {
+    $back_create = '../user/create-task.php';
+    $back_tasks  = '../user/my-tasks.php';
 }
 
-$title       = trim($_POST['title'] ?? '');
-$description = trim($_POST['description'] ?? '');
-$section_id  = (int)($_POST['section_id'] ?? 0);
-$assigned_to = $_POST['assigned_to'] ?? [];
-$priority    = $_POST['priority'] ?? 'MEDIUM';
-$start_date  = !empty($_POST['start_date']) ? $_POST['start_date'] : null;
-$due_date    = !empty($_POST['due_date']) ? $_POST['due_date'] : null;
-$created_by  = $_SESSION['user_id'];
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+    setFlash('danger', 'Invalid request.');
+    redirect($back_create);
+}
 
+$section_id  = (int)($_POST['section_id'] ?? 0);
+$section_id  = $section_id > 0 ? $section_id : null; // optional
+$assigned_to = $_POST['assigned_to'] ?? [];
+$tasks       = $_POST['tasks'] ?? [];
+$created_by  = (int)$_SESSION['user_id'];
+
+// Support single or multi select
 if (!is_array($assigned_to)) {
     $assigned_to = $assigned_to !== '' ? [(int)$assigned_to] : [];
 }
-$assigned_to = array_filter(array_map('intval', $assigned_to));
+$assigned_to = array_values(array_unique(array_filter(array_map('intval', $assigned_to))));
 
-if (empty($title) || $section_id <= 0 || empty($assigned_to)) {
-    setFlash('danger', 'Title, Section and at least one assignee are required.');
-    redirect('../admin/create-task.php');
+// Agents: ignore whatever the browser sent, always assign to themselves
+if ($is_self_only) {
+    $assigned_to = [$created_by];
 }
 
-if (!in_array($priority, ['LOW', 'MEDIUM', 'HIGH', 'URGENT'])) {
-    $priority = 'MEDIUM';
+if (empty($assigned_to)) {
+    setFlash('danger', 'At least one assignee is required.');
+    redirect($back_create);
+}
+
+if (empty($tasks) || !is_array($tasks)) {
+    setFlash('danger', 'At least one task is required.');
+    redirect($back_create);
+}
+
+// ---------- Clean tasks ----------
+function isValidDate($d) {
+    $dt = DateTime::createFromFormat('Y-m-d', (string)$d);
+    return $dt && $dt->format('Y-m-d') === $d;
+}
+
+$clean_tasks = [];
+foreach ($tasks as $t) {
+    if (!is_array($t)) continue;
+
+    $title = trim($t['title'] ?? '');
+    if ($title === '') continue;
+
+    $priority = $t['priority'] ?? 'MEDIUM';
+    if (!in_array($priority, ['LOW', 'MEDIUM', 'HIGH', 'URGENT'], true)) {
+        $priority = 'MEDIUM';
+    }
+
+    $start = (!empty($t['start_date']) && isValidDate($t['start_date'])) ? $t['start_date'] : date('Y-m-d');
+    $days  = max(1, (int)($t['duration_days'] ?? 1));
+
+    // Due date: form එකෙන් එන එක use කරනවා, නැත්නම් start + duration එකෙන් හදනවා
+    if (!empty($t['due_date']) && isValidDate($t['due_date'])) {
+        $due = $t['due_date'];
+    } else {
+        $due = date('Y-m-d', strtotime($start . ' +' . ($days - 1) . ' days'));
+    }
+
+    $clean_tasks[] = [
+        'title'       => $title,
+        'description' => trim($t['description'] ?? ''),
+        'priority'    => $priority,
+        'start_date'  => $start,
+        'due_date'    => $due,
+    ];
+}
+
+if (empty($clean_tasks)) {
+    setFlash('danger', 'Please add at least one task with a title.');
+    redirect($back_create);
 }
 
 $pdo = getDB();
 
+// Validate section only if provided
+if ($section_id !== null) {
+    $stmt = $pdo->prepare("SELECT id FROM sections WHERE id = ? AND status = 'active'");
+    $stmt->execute([$section_id]);
+    if (!$stmt->fetch()) {
+        setFlash('danger', 'Invalid section selected.');
+        redirect($back_create);
+    }
+}
+
+// ---------- Attachment (එක පාරක් upload කරලා හැම task එකටම use කරනවා) ----------
 $attachment = null;
 if (!empty($_FILES['attachment']['name'])) {
     $upload = uploadFile($_FILES['attachment'], '../uploads/task-files/');
@@ -45,37 +120,119 @@ if (!empty($_FILES['attachment']['name'])) {
         $attachment = $upload['filename'];
     } else {
         setFlash('danger', $upload['message']);
-        redirect('../admin/create-task.php');
+        redirect($back_create);
     }
 }
 
+// Who can be assigned?
+if ($role === 'super_admin') {
+    // Managing Director can assign to anyone including self
+    $allowed_roles = ['super_admin', 'admin', 'coordinator', 'user'];
+    $creator_label = 'Managing Director';
+} elseif ($role === 'admin') {
+    // Admin cannot assign to Managing Director
+    $allowed_roles = ['admin', 'coordinator', 'user'];
+    $creator_label = 'Management';
+} else {
+    // Agent can only assign to self (their own role)
+    $allowed_roles = ['user'];
+    $creator_label = 'Agent (self-assigned)';
+}
+
+$placeholders = implode(',', array_fill(0, count($allowed_roles), '?'));
+$personStmt = $pdo->prepare("
+    SELECT id, name, role
+    FROM users
+    WHERE id = ?
+      AND role IN ($placeholders)
+      AND status = 'active'
+    LIMIT 1
+");
+
+$insertStmt = $pdo->prepare("
+    INSERT INTO tasks
+        (title, description, section_id, assigned_to, created_by, priority, status, start_date, due_date, attachment)
+    VALUES
+        (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)
+");
+
 $success_count = 0;
+$people_count  = 0;
 
-foreach ($assigned_to as $person_id) {
-    // Allow both Agent (user) and Coordinator
-    $stmt = $pdo->prepare("SELECT id, name, role FROM users WHERE id = ? AND role IN ('user','coordinator') AND status = 'active'");
-    $stmt->execute([$person_id]);
-    $person = $stmt->fetch();
+try {
+    $pdo->beginTransaction();
 
-    if (!$person) {
-        continue;
+    foreach ($assigned_to as $person_id) {
+        // Extra safety: agents can never create a task for someone else
+        if ($is_self_only && $person_id !== $created_by) {
+            continue;
+        }
+
+        $personStmt->execute(array_merge([$person_id], $allowed_roles));
+        $person = $personStmt->fetch();
+
+        if (!$person) {
+            continue; // invalid / not allowed
+        }
+        $people_count++;
+
+        // හැම person කෙනෙක්ටම හැම task එකක්ම
+        foreach ($clean_tasks as $task) {
+            $insertStmt->execute([
+                $task['title'],
+                $task['description'],
+                $section_id,
+                $person_id,
+                $created_by,
+                $task['priority'],
+                $task['start_date'],
+                $task['due_date'],
+                $attachment
+            ]);
+
+            $task_id = (int)$pdo->lastInsertId();
+
+            logActivity(
+                $pdo,
+                $task_id,
+                $created_by,
+                "Task created by $creator_label and assigned to " . $person['name'] . " (" . $person['role'] . ")"
+            );
+
+            // Agents don't need a notification for their own task
+            if (!$is_self_only) {
+                createNotification(
+                    $pdo,
+                    $person_id,
+                    'New Task Assigned',
+                    "You have been assigned a new task: \"" . $task['title'] . "\"",
+                    'task',
+                    $task_id
+                );
+            }
+
+            $success_count++;
+        }
     }
 
-    $stmt = $pdo->prepare("INSERT INTO tasks (title, description, section_id, assigned_to, created_by, priority, status, start_date, due_date, attachment) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)");
-    $stmt->execute([$title, $description, $section_id, $person_id, $created_by, $priority, $start_date, $due_date, $attachment]);
-
-    $task_id = $pdo->lastInsertId();
-    logActivity($pdo, $task_id, $created_by, "Task created and assigned to " . $person['role']);
-    createNotification($pdo, $person_id, 'New Task Assigned', "You have been assigned a new task: \"$title\"", 'task', $task_id);
-
-    $success_count++;
+    $pdo->commit();
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    error_log('create-task.php error: ' . $e->getMessage());
+    setFlash('danger', 'Something went wrong while creating tasks. Nothing was saved.');
+    redirect($back_create);
 }
 
 if ($success_count > 0) {
-    setFlash('success', "Task created and assigned to $success_count person(s).");
+    if ($is_self_only) {
+        setFlash('success', count($clean_tasks) . ' task(s) added to your list.');
+        redirect($back_tasks);
+    }
+    setFlash('success', count($clean_tasks) . " task(s) assigned to $people_count person(s) ($success_count total).");
 } else {
-    setFlash('danger', 'Could not assign task. Check selected people.');
+    setFlash('danger', 'Could not assign tasks. Check selected people.');
 }
 
-redirect('../admin/tasks.php');
-?>
+redirect($back_create);
