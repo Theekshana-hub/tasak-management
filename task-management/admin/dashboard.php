@@ -4,10 +4,11 @@ require_once '../includes/admin_auth.php';
 require_once '../includes/header.php';
 require_once '../includes/sidebar.php';
 
-$pdo = getDB();
+$pdo   = getDB();
 $today = date('Y-m-d');
 
-// Helper: parse Day X/Y from title
+/* ===================== HELPERS ===================== */
+
 function parseDayLabelDash($title) {
     if (preg_match('/\(Day\s*(\d+)\s*\/\s*(\d+)\s*[–\-]\s*([^)]+)\)/i', $title ?? '', $m)) {
         return [
@@ -19,52 +20,123 @@ function parseDayLabelDash($title) {
     return null;
 }
 
-// ===== Overall Stats =====
-$total_tasks = $pdo->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
-$pending     = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'PENDING'")->fetchColumn();
-$in_progress = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'IN_PROGRESS'")->fetchColumn();
-$completed   = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'COMPLETED'")->fetchColumn();
-$cancelled   = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'CANCELLED'")->fetchColumn();
+function priorityBadgeClass($priority) {
+    return match(strtoupper($priority ?? '')) {
+        'URGENT', 'HIGH' => 'danger',
+        'MEDIUM'         => 'warning',
+        'LOW'            => 'success',
+        default          => 'secondary'
+    };
+}
+
+function statusBadgeClass($status) {
+    return match($status ?? '') {
+        'COMPLETED'   => 'success',
+        'IN_PROGRESS' => 'primary',
+        'CANCELLED'   => 'secondary',
+        default       => 'warning'
+    };
+}
+
+/* ===================== OVERALL STATS (Super Admin tasks exclude) ===================== */
+
+$total_tasks = $pdo->query("
+    SELECT COUNT(*) 
+    FROM tasks t
+    LEFT JOIN users c ON c.id = t.created_by
+    WHERE (c.role IS NULL OR c.role != 'super_admin')
+")->fetchColumn();
+
+$pending = $pdo->query("
+    SELECT COUNT(*) 
+    FROM tasks t
+    LEFT JOIN users c ON c.id = t.created_by
+    WHERE t.status = 'PENDING'
+      AND (c.role IS NULL OR c.role != 'super_admin')
+")->fetchColumn();
+
+$in_progress = $pdo->query("
+    SELECT COUNT(*) 
+    FROM tasks t
+    LEFT JOIN users c ON c.id = t.created_by
+    WHERE t.status = 'IN_PROGRESS'
+      AND (c.role IS NULL OR c.role != 'super_admin')
+")->fetchColumn();
+
+$completed = $pdo->query("
+    SELECT COUNT(*) 
+    FROM tasks t
+    LEFT JOIN users c ON c.id = t.created_by
+    WHERE t.status = 'COMPLETED'
+      AND (c.role IS NULL OR c.role != 'super_admin')
+")->fetchColumn();
+
+$cancelled = $pdo->query("
+    SELECT COUNT(*) 
+    FROM tasks t
+    LEFT JOIN users c ON c.id = t.created_by
+    WHERE t.status = 'CANCELLED'
+      AND (c.role IS NULL OR c.role != 'super_admin')
+")->fetchColumn();
+
 $total_users = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'user'")->fetchColumn();
 
-// Overdue count
-$overdue = $pdo->query("SELECT COUNT(*) FROM tasks WHERE due_date < CURDATE() AND status NOT IN ('COMPLETED','CANCELLED')")->fetchColumn();
+$overdue = $pdo->query("
+    SELECT COUNT(*) 
+    FROM tasks t
+    LEFT JOIN users c ON c.id = t.created_by
+    WHERE t.due_date < CURDATE() 
+      AND t.status NOT IN ('COMPLETED','CANCELLED')
+      AND (c.role IS NULL OR c.role != 'super_admin')
+")->fetchColumn();
 
-// ===== TODAY's Tasks =====
-$today_tasks = $pdo->query("
-    SELECT t.*, u.name AS assigned_name, s.name AS section_name
+/* ===================== TODAY'S TASKS (Super Admin exclude) ===================== */
+
+$stmt = $pdo->prepare("
+    SELECT t.*, 
+           u.name AS assigned_name, 
+           s.name AS section_name
     FROM tasks t
     LEFT JOIN users u ON u.id = t.assigned_to
     LEFT JOIN sections s ON s.id = t.section_id
-    WHERE t.due_date = '$today' OR t.start_date = '$today'
+    LEFT JOIN users c ON c.id = t.created_by
+    WHERE (t.due_date = ? OR t.start_date = ?)
+      AND (c.role IS NULL OR c.role != 'super_admin')
     ORDER BY t.status ASC, u.name ASC
-")->fetchAll();
+");
+$stmt->execute([$today, $today]);
+$today_tasks = $stmt->fetchAll();
 
 $today_total     = count($today_tasks);
 $today_pending   = 0;
 $today_progress  = 0;
 $today_completed = 0;
+
 foreach ($today_tasks as $tt) {
-    if ($tt['status'] === 'PENDING') $today_pending++;
+    if ($tt['status'] === 'PENDING')         $today_pending++;
     elseif ($tt['status'] === 'IN_PROGRESS') $today_progress++;
-    elseif ($tt['status'] === 'COMPLETED') $today_completed++;
+    elseif ($tt['status'] === 'COMPLETED')   $today_completed++;
 }
 
-// ===== OVERDUE Tasks (list) =====
+/* ===================== OVERDUE TASKS ===================== */
+
 $overdue_tasks = $pdo->query("
-    SELECT t.*, u.name AS assigned_name, s.name AS section_name
+    SELECT t.*, 
+           u.name AS assigned_name, 
+           s.name AS section_name
     FROM tasks t
     LEFT JOIN users u ON u.id = t.assigned_to
     LEFT JOIN sections s ON s.id = t.section_id
+    LEFT JOIN users c ON c.id = t.created_by
     WHERE t.due_date < CURDATE() 
       AND t.status NOT IN ('COMPLETED','CANCELLED')
+      AND (c.role IS NULL OR c.role != 'super_admin')
     ORDER BY t.due_date ASC
     LIMIT 10
 ")->fetchAll();
 
-// ===== Section-wise Breakdown (TODAY ONLY) =====
-// Join condition itself is restricted to today's tasks (due_date OR start_date = today),
-// so every count below reflects only today's tasks per section.
+/* ===================== SECTION STATS (TODAY ONLY) ===================== */
+
 $section_stats = $pdo->query("
     SELECT
         s.id,
@@ -78,17 +150,23 @@ $section_stats = $pdo->query("
     LEFT JOIN tasks t 
         ON t.section_id = s.id 
        AND (t.due_date = CURDATE() OR t.start_date = CURDATE())
+       AND (t.created_by IS NULL OR t.created_by NOT IN (SELECT id FROM users WHERE role = 'super_admin'))
     WHERE s.status = 'active'
     GROUP BY s.id, s.name
     ORDER BY s.name ASC
 ")->fetchAll();
 
-// Recent tasks
+/* ===================== RECENT TASKS ===================== */
+
 $recent_tasks = $pdo->query("
-    SELECT t.*, u.name AS assigned_name, s.name AS section_name
+    SELECT t.*, 
+           u.name AS assigned_name, 
+           s.name AS section_name
     FROM tasks t
     LEFT JOIN users u ON u.id = t.assigned_to
     LEFT JOIN sections s ON s.id = t.section_id
+    LEFT JOIN users c ON c.id = t.created_by
+    WHERE (c.role IS NULL OR c.role != 'super_admin')
     ORDER BY t.created_at DESC
     LIMIT 8
 ")->fetchAll();
@@ -109,7 +187,7 @@ $recent_tasks = $pdo->query("
                 </div>
                 <div>
                     <div class="text-muted small">Total Tasks</div>
-                    <div class="fs-4 fw-bold"><?php echo $total_tasks; ?></div>
+                    <div class="fs-4 fw-bold"><?= $total_tasks ?></div>
                 </div>
             </div>
         </div>
@@ -122,7 +200,7 @@ $recent_tasks = $pdo->query("
                 </div>
                 <div>
                     <div class="text-muted small">Pending</div>
-                    <div class="fs-4 fw-bold"><?php echo $pending; ?></div>
+                    <div class="fs-4 fw-bold"><?= $pending ?></div>
                 </div>
             </div>
         </div>
@@ -135,7 +213,7 @@ $recent_tasks = $pdo->query("
                 </div>
                 <div>
                     <div class="text-muted small">In Progress</div>
-                    <div class="fs-4 fw-bold"><?php echo $in_progress; ?></div>
+                    <div class="fs-4 fw-bold"><?= $in_progress ?></div>
                 </div>
             </div>
         </div>
@@ -148,7 +226,7 @@ $recent_tasks = $pdo->query("
                 </div>
                 <div>
                     <div class="text-muted small">Completed</div>
-                    <div class="fs-4 fw-bold"><?php echo $completed; ?></div>
+                    <div class="fs-4 fw-bold"><?= $completed ?></div>
                 </div>
             </div>
         </div>
@@ -161,7 +239,7 @@ $recent_tasks = $pdo->query("
                 </div>
                 <div>
                     <div class="text-muted small">Overdue</div>
-                    <div class="fs-4 fw-bold"><?php echo $overdue; ?></div>
+                    <div class="fs-4 fw-bold"><?= $overdue ?></div>
                 </div>
             </div>
         </div>
@@ -174,7 +252,7 @@ $recent_tasks = $pdo->query("
                 </div>
                 <div>
                     <div class="text-muted small">Staff Users</div>
-                    <div class="fs-4 fw-bold"><?php echo $total_users; ?></div>
+                    <div class="fs-4 fw-bold"><?= $total_users ?></div>
                 </div>
             </div>
         </div>
@@ -187,7 +265,7 @@ $recent_tasks = $pdo->query("
         <span class="fw-semibold">
             <i class="bi bi-calendar-day text-warning"></i>
             Today's Tasks
-            <small class="text-muted fw-normal">(<?php echo date('d M Y'); ?>)</small>
+            <small class="text-muted fw-normal">(<?= date('d M Y') ?>)</small>
         </span>
         <a href="tasks.php" class="small">View All</a>
     </div>
@@ -195,25 +273,25 @@ $recent_tasks = $pdo->query("
         <div class="row g-2 mb-3">
             <div class="col-6 col-md-3">
                 <div class="p-2 rounded bg-light text-center">
-                    <div class="fs-5 fw-bold"><?php echo $today_total; ?></div>
+                    <div class="fs-5 fw-bold"><?= $today_total ?></div>
                     <div class="small text-muted">Total Today</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
                 <div class="p-2 rounded bg-light text-center">
-                    <div class="fs-5 fw-bold text-warning"><?php echo $today_pending; ?></div>
+                    <div class="fs-5 fw-bold text-warning"><?= $today_pending ?></div>
                     <div class="small text-muted">Pending</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
                 <div class="p-2 rounded bg-light text-center">
-                    <div class="fs-5 fw-bold text-primary"><?php echo $today_progress; ?></div>
+                    <div class="fs-5 fw-bold text-primary"><?= $today_progress ?></div>
                     <div class="small text-muted">In Progress</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
                 <div class="p-2 rounded bg-light text-center">
-                    <div class="fs-5 fw-bold text-success"><?php echo $today_completed; ?></div>
+                    <div class="fs-5 fw-bold text-success"><?= $today_completed ?></div>
                     <div class="small text-muted">Completed</div>
                 </div>
             </div>
@@ -239,32 +317,26 @@ $recent_tasks = $pdo->query("
                             $dayInfo = parseDayLabelDash($t['title'] ?? '');
                             $isToday = (!empty($t['due_date']) && $t['due_date'] === $today);
                         ?>
-                        <tr class="<?php echo $isToday ? 'table-warning' : ''; ?>">
-                            <td class="fw-semibold"><?php echo e($dayInfo ? $dayInfo['base'] : ($t['title'] ?? '-')); ?></td>
+                        <tr class="<?= $isToday ? 'table-warning' : '' ?>">
+                            <td class="fw-semibold"><?= e($dayInfo ? $dayInfo['base'] : ($t['title'] ?? '-')) ?></td>
                             <td>
                                 <?php if ($dayInfo): ?>
-                                    <span class="badge bg-primary">Day <?php echo $dayInfo['day']; ?>/<?php echo $dayInfo['total']; ?></span>
+                                    <span class="badge bg-primary">Day <?= $dayInfo['day'] ?>/<?= $dayInfo['total'] ?></span>
                                 <?php else: ?>
                                     <span class="badge bg-secondary">1 Day</span>
                                 <?php endif; ?>
                             </td>
-                            <td><?php echo e($t['assigned_name'] ?? '-'); ?></td>
-                            <td><?php echo e($t['section_name'] ?? '-'); ?></td>
+                            <td><?= e($t['assigned_name'] ?? '-') ?></td>
+                            <td><?= e($t['section_name'] ?? '-') ?></td>
                             <td>
-                                <?php
-                                $pClass = match($t['priority'] ?? '') {
-                                    'High' => 'danger', 'Medium' => 'warning', 'Low' => 'success', default => 'secondary'
-                                };
-                                ?>
-                                <span class="badge bg-<?php echo $pClass; ?>"><?php echo e($t['priority'] ?? '-'); ?></span>
+                                <span class="badge bg-<?= priorityBadgeClass($t['priority'] ?? '') ?>">
+                                    <?= e($t['priority'] ?? '-') ?>
+                                </span>
                             </td>
                             <td>
-                                <?php
-                                $sClass = match($t['status'] ?? '') {
-                                    'COMPLETED' => 'success', 'IN_PROGRESS' => 'primary', 'CANCELLED' => 'secondary', default => 'warning'
-                                };
-                                ?>
-                                <span class="badge bg-<?php echo $sClass; ?>"><?php echo e($t['status'] ?? '-'); ?></span>
+                                <span class="badge bg-<?= statusBadgeClass($t['status'] ?? '') ?>">
+                                    <?= e($t['status'] ?? '-') ?>
+                                </span>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -281,9 +353,9 @@ $recent_tasks = $pdo->query("
         <span class="fw-semibold">
             <i class="bi bi-diagram-3 text-info"></i>
             Section-wise Task Breakdown
-            <small class="text-muted fw-normal">(<?php echo date('d M Y'); ?>)</small>
+            <small class="text-muted fw-normal">(<?= date('d M Y') ?>)</small>
         </span>
-        <span class="badge bg-info text-dark"><?php echo count($section_stats); ?> Sections</span>
+        <span class="badge bg-info text-dark"><?= count($section_stats) ?> Sections</span>
     </div>
     <div class="card-body">
         <?php if (empty($section_stats)): ?>
@@ -302,9 +374,9 @@ $recent_tasks = $pdo->query("
                     <div class="card h-100 border">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h6 class="fw-bold mb-0"><?php echo e($sec['section_name']); ?></h6>
+                                <h6 class="fw-bold mb-0"><?= e($sec['section_name']) ?></h6>
                                 <?php if ($secOverdue > 0): ?>
-                                    <span class="badge bg-danger"><?php echo $secOverdue; ?> overdue</span>
+                                    <span class="badge bg-danger"><?= $secOverdue ?> overdue</span>
                                 <?php endif; ?>
                             </div>
                             <?php if ($secTotal === 0): ?>
@@ -312,36 +384,34 @@ $recent_tasks = $pdo->query("
                             <?php else: ?>
                                 <div class="d-flex justify-content-between small text-muted mb-1">
                                     <span>Today's Progress</span>
-                                    <span><?php echo $secCompleted; ?> / <?php echo $secTotal; ?> (<?php echo $pct; ?>%)</span>
+                                    <span><?= $secCompleted ?> / <?= $secTotal ?> (<?= $pct ?>%)</span>
                                 </div>
                                 <div class="progress mb-3" style="height: 8px;">
-                                    <div class="progress-bar bg-success" role="progressbar"
-                                         style="width: <?php echo $pct; ?>%;"
-                                         aria-valuenow="<?php echo $pct; ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                                    <div class="progress-bar bg-success" style="width: <?= $pct ?>%;"></div>
                                 </div>
                                 <div class="row g-2 text-center">
                                     <div class="col-3">
                                         <div class="p-1 rounded bg-light">
-                                            <div class="fw-bold"><?php echo $secTotal; ?></div>
-                                            <div class="small text-muted" style="font-size: 0.7rem;">Total</div>
+                                            <div class="fw-bold"><?= $secTotal ?></div>
+                                            <div class="small text-muted" style="font-size:0.7rem;">Total</div>
                                         </div>
                                     </div>
                                     <div class="col-3">
                                         <div class="p-1 rounded bg-light">
-                                            <div class="fw-bold text-warning"><?php echo $secPending; ?></div>
-                                            <div class="small text-muted" style="font-size: 0.7rem;">Pending</div>
+                                            <div class="fw-bold text-warning"><?= $secPending ?></div>
+                                            <div class="small text-muted" style="font-size:0.7rem;">Pending</div>
                                         </div>
                                     </div>
                                     <div class="col-3">
                                         <div class="p-1 rounded bg-light">
-                                            <div class="fw-bold text-primary"><?php echo $secProgress; ?></div>
-                                            <div class="small text-muted" style="font-size: 0.7rem;">Doing</div>
+                                            <div class="fw-bold text-primary"><?= $secProgress ?></div>
+                                            <div class="small text-muted" style="font-size:0.7rem;">Doing</div>
                                         </div>
                                     </div>
                                     <div class="col-3">
                                         <div class="p-1 rounded bg-light">
-                                            <div class="fw-bold text-success"><?php echo $secCompleted; ?></div>
-                                            <div class="small text-muted" style="font-size: 0.7rem;">Done</div>
+                                            <div class="fw-bold text-success"><?= $secCompleted ?></div>
+                                            <div class="small text-muted" style="font-size:0.7rem;">Done</div>
                                         </div>
                                     </div>
                                 </div>
@@ -361,7 +431,7 @@ $recent_tasks = $pdo->query("
         <span class="fw-semibold">
             <i class="bi bi-exclamation-triangle text-danger"></i>
             Overdue Tasks
-            <span class="badge bg-danger ms-1"><?php echo $overdue; ?></span>
+            <span class="badge bg-danger ms-1"><?= $overdue ?></span>
         </span>
         <a href="tasks.php?status=overdue" class="small">View All</a>
     </div>
@@ -386,22 +456,17 @@ $recent_tasks = $pdo->query("
                             $dayInfo = parseDayLabelDash($t['title'] ?? '');
                         ?>
                         <tr>
-                            <td class="fw-semibold"><?php echo e($dayInfo ? $dayInfo['base'] : ($t['title'] ?? '-')); ?></td>
-                            <td><?php echo e($t['assigned_name'] ?? '-'); ?></td>
-                            <td><?php echo e($t['section_name'] ?? '-'); ?></td>
+                            <td class="fw-semibold"><?= e($dayInfo ? $dayInfo['base'] : ($t['title'] ?? '-')) ?></td>
+                            <td><?= e($t['assigned_name'] ?? '-') ?></td>
+                            <td><?= e($t['section_name'] ?? '-') ?></td>
                             <td>
-                                <?php
-                                $pClass = match($t['priority'] ?? '') {
-                                    'High' => 'danger', 'Medium' => 'warning', 'Low' => 'success', default => 'secondary'
-                                };
-                                ?>
-                                <span class="badge bg-<?php echo $pClass; ?>"><?php echo e($t['priority'] ?? '-'); ?></span>
+                                <span class="badge bg-<?= priorityBadgeClass($t['priority'] ?? '') ?>">
+                                    <?= e($t['priority'] ?? '-') ?>
+                                </span>
                             </td>
-                            <td>
-                                <span class="badge bg-danger">OVERDUE</span>
-                            </td>
+                            <td><span class="badge bg-danger">OVERDUE</span></td>
                             <td class="text-danger fw-semibold">
-                                <?php echo date('d M Y', strtotime($t['due_date'])); ?>
+                                <?= date('d M Y', strtotime($t['due_date'])) ?>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -433,49 +498,45 @@ $recent_tasks = $pdo->query("
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($recent_tasks as $t):
-                                $dayInfo = parseDayLabelDash($t['title'] ?? '');
-                                $isTodayRecent = (!empty($t['due_date']) && $t['due_date'] === $today);
-                            ?>
-                            <tr class="<?php echo $isTodayRecent ? 'table-warning' : ''; ?>">
-                                <td>
-                                    <a href="task-details.php?id=<?php echo $t['id']; ?>" class="text-decoration-none">
-                                        <?php echo e($dayInfo ? $dayInfo['base'] : ($t['title'] ?? '-')); ?>
-                                    </a>
-                                    <?php if ($dayInfo): ?>
-                                        <span class="badge bg-primary ms-1">Day <?php echo $dayInfo['day']; ?>/<?php echo $dayInfo['total']; ?></span>
-                                    <?php endif; ?>
-                                    <?php if ($isTodayRecent): ?>
-                                        <span class="badge bg-warning text-dark ms-1">Today</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td><?php echo e($t['section_name'] ?? '-'); ?></td>
-                                <td><?php echo e($t['assigned_name'] ?? '-'); ?></td>
-                                <td>
-                                    <?php
-                                    if (function_exists('statusBadge')) {
-                                        echo statusBadge($t['status'], $t['due_date']);
-                                    } else {
-                                        $sClass = match($t['status'] ?? '') {
-                                            'COMPLETED' => 'success', 'IN_PROGRESS' => 'primary', 'CANCELLED' => 'secondary', default => 'warning'
-                                        };
-                                        echo '<span class="badge bg-' . $sClass . '">' . e($t['status'] ?? '-') . '</span>';
-                                    }
-                                    ?>
-                                </td>
-                                <td>
-                                    <?php
-                                    if (function_exists('formatDate')) {
-                                        echo formatDate($t['due_date']);
-                                    } else {
-                                        echo !empty($t['due_date']) ? date('d M Y', strtotime($t['due_date'])) : '-';
-                                    }
-                                    ?>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
                             <?php if (empty($recent_tasks)): ?>
-                            <tr><td colspan="5" class="text-center text-muted">No tasks yet. Create one!</td></tr>
+                                <tr><td colspan="5" class="text-center text-muted py-4">No tasks yet. Create one!</td></tr>
+                            <?php else: ?>
+                                <?php foreach ($recent_tasks as $t):
+                                    $dayInfo       = parseDayLabelDash($t['title'] ?? '');
+                                    $isTodayRecent = (!empty($t['due_date']) && $t['due_date'] === $today);
+                                ?>
+                                <tr class="<?= $isTodayRecent ? 'table-warning' : '' ?>">
+                                    <td>
+                                        <a href="task-details.php?id=<?= (int)$t['id'] ?>" class="text-decoration-none">
+                                            <?= e($dayInfo ? $dayInfo['base'] : ($t['title'] ?? '-')) ?>
+                                        </a>
+                                        <?php if ($dayInfo): ?>
+                                            <span class="badge bg-primary ms-1">Day <?= $dayInfo['day'] ?>/<?= $dayInfo['total'] ?></span>
+                                        <?php endif; ?>
+                                        <?php if ($isTodayRecent): ?>
+                                            <span class="badge bg-warning text-dark ms-1">Today</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><?= e($t['section_name'] ?? '-') ?></td>
+                                    <td><?= e($t['assigned_name'] ?? '-') ?></td>
+                                    <td>
+                                        <?php if (function_exists('statusBadge')): ?>
+                                            <?= statusBadge($t['status'], $t['due_date']) ?>
+                                        <?php else: ?>
+                                            <span class="badge bg-<?= statusBadgeClass($t['status'] ?? '') ?>">
+                                                <?= e($t['status'] ?? '-') ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if (function_exists('formatDate')): ?>
+                                            <?= formatDate($t['due_date']) ?>
+                                        <?php else: ?>
+                                            <?= !empty($t['due_date']) ? date('d M Y', strtotime($t['due_date'])) : '-' ?>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
                             <?php endif; ?>
                         </tbody>
                     </table>

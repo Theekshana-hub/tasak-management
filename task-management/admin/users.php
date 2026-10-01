@@ -8,11 +8,13 @@ $pdo = getDB();
 
 $search     = trim($_GET['search'] ?? '');
 $section_id = trim($_GET['section_id'] ?? '');
+$role_filter = trim($_GET['role'] ?? '');
 
+// Admin ට Super Admin users පෙන්නන්න එපා
 $sql = "SELECT u.*, s.name AS section_name 
         FROM users u 
         LEFT JOIN sections s ON s.id = u.section_id 
-        WHERE 1=1";
+        WHERE u.role != 'super_admin'";
 $params = [];
 
 if ($search !== '') {
@@ -25,7 +27,12 @@ if ($search !== '') {
 
 if ($section_id !== '') {
     $sql .= " AND u.section_id = ?";
-    $params[] = $section_id;
+    $params[] = (int)$section_id;
+}
+
+if ($role_filter !== '') {
+    $sql .= " AND u.role = ?";
+    $params[] = $role_filter;
 }
 
 $sql .= " ORDER BY u.created_at DESC";
@@ -34,32 +41,48 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $users = $stmt->fetchAll();
 
-// Get all sections for the dropdown
-$sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetchAll();
+// Sections for filter
+$sections = $pdo->query("SELECT id, name FROM sections WHERE status = 'active' ORDER BY name ASC")->fetchAll();
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0"><i class="bi bi-people"></i> Users</h2>
-    <a href="add-user.php" class="btn btn-coral"><i class="bi bi-person-plus"></i> Add User</a>
+    <a href="add-user.php" class="btn btn-coral">
+        <i class="bi bi-person-plus"></i> Add User
+    </a>
 </div>
 
-<form method="GET" class="row g-2 mb-3">
-    <div class="col-md-4">
-        <input type="text" name="search" class="form-control" placeholder="Search name, email, phone..." value="<?php echo e($search); ?>">
-    </div>
-    <div class="col-md-3">
-        <select name="section_id" class="form-select">
-            <option value="">-- All Sections --</option>
-            <?php foreach ($sections as $s): ?>
-                <option value="<?php echo $s['id']; ?>" <?php echo ($section_id == $s['id']) ? 'selected' : ''; ?>>
-                    <?php echo e($s['name']); ?>
-                </option>
-            <?php endforeach; ?>
-        </select>
-    </div>
-    <div class="col-auto">
-        <button type="submit" class="btn btn-navy bg-navy text-white">Search</button>
-        <a href="users.php" class="btn btn-outline-secondary">Reset</a>
+<form method="GET" class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-md-4">
+                <input type="text" name="search" class="form-control" 
+                       placeholder="Search name, email, phone..." 
+                       value="<?= e($search) ?>">
+            </div>
+            <div class="col-md-3">
+                <select name="section_id" class="form-select">
+                    <option value="">-- All Sections --</option>
+                    <?php foreach ($sections as $s): ?>
+                        <option value="<?= $s['id'] ?>" <?= ($section_id == $s['id']) ? 'selected' : '' ?>>
+                            <?= e($s['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="role" class="form-select">
+                    <option value="">-- All Roles --</option>
+                    <option value="admin" <?= $role_filter === 'admin' ? 'selected' : '' ?>>Admin</option>
+                    <option value="coordinator" <?= $role_filter === 'coordinator' ? 'selected' : '' ?>>Coordinator</option>
+                    <option value="user" <?= $role_filter === 'user' ? 'selected' : '' ?>>Agent / User</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-navy bg-navy text-white">Search</button>
+                <a href="users.php" class="btn btn-outline-secondary">Reset</a>
+            </div>
+        </div>
     </div>
 </form>
 
@@ -75,69 +98,66 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
                     <th>Section</th>
                     <th>Role</th>
                     <th>Status</th>
-                    <th style="width: 120px;">Actions</th>
+                    <th style="width: 130px;">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($users as $i => $u): ?>
-                <tr>
-                    <td><?php echo $i + 1; ?></td>
-                    <td><?php echo e($u['name']); ?></td>
-                    <td><?php echo e($u['email']); ?></td>
-                    <td><?php echo e($u['phone'] ?? '-'); ?></td>
-                    <td><?php echo e($u['section_name'] ?? '-'); ?></td>
-                    <td>
-                        <?php if ($u['role'] === 'super_admin'): ?>
-                            <span class="badge bg-warning text-dark">Super Admin</span>
-                        <?php elseif ($u['role'] === 'admin'): ?>
-                            <span class="badge bg-danger">Admin</span>
-                        <?php elseif ($u['role'] === 'coordinator'): ?>
-                            <span class="badge bg-info text-dark">Coordinator</span>
-                        <?php else: ?>
-                            <span class="badge bg-primary">User / Agent</span>
-                        <?php endif; ?>
-                    </td>
-                    <td>
-                        <?php if ($u['status'] === 'active'): ?>
-                            <span class="badge bg-success">Active</span>
-                        <?php else: ?>
-                            <span class="badge bg-secondary">Inactive</span>
-                        <?php endif; ?>
-                    </td>
-                    <td>
-                        <div class="d-flex gap-1">
-                            <?php if ($u['role'] !== 'super_admin'): ?>
-                                <!-- Edit Button (Super Admin ට පේන්නේ නෑ) -->
-                                <a href="edit-user.php?id=<?php echo $u['id']; ?>" 
-                                   class="btn btn-sm btn-outline-primary" title="Edit">
+                <?php if (empty($users)): ?>
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">No users found</td>
+                    </tr>
+                <?php else: ?>
+                    <?php foreach ($users as $i => $u): ?>
+                    <tr>
+                        <td><?= $i + 1 ?></td>
+                        <td class="fw-semibold"><?= e($u['name']) ?></td>
+                        <td><?= e($u['email']) ?></td>
+                        <td><?= e($u['phone'] ?? '—') ?></td>
+                        <td><?= e($u['section_name'] ?? '—') ?></td>
+                        <td>
+                            <?php if ($u['role'] === 'admin'): ?>
+                                <span class="badge bg-danger">Admin</span>
+                            <?php elseif ($u['role'] === 'coordinator'): ?>
+                                <span class="badge bg-info text-dark">Coordinator</span>
+                            <?php else: ?>
+                                <span class="badge bg-primary">Agent</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (($u['status'] ?? '') === 'active'): ?>
+                                <span class="badge bg-success">Active</span>
+                            <?php else: ?>
+                                <span class="badge bg-secondary">Inactive</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <!-- Edit Button -->
+                                <a href="edit-user.php?id=<?= (int)$u['id'] ?>" 
+                                   class="btn btn-sm btn-outline-primary" 
+                                   title="Edit">
                                     <i class="bi bi-pencil"></i>
                                 </a>
 
-                                <!-- Delete Button (own account සහ Super Admin ට පේන්නේ නෑ) -->
-                                <?php if ($u['id'] != $_SESSION['user_id']): ?>
-                                    <form method="POST" action="../actions/delete-user.php" 
+                                <!-- Delete Button (own account එකට නැහැ) -->
+                                <?php if ((int)$u['id'] !== (int)($_SESSION['user_id'] ?? 0)): ?>
+                                    <form method="POST" 
+                                          action="../actions/delete-user.php" 
                                           onsubmit="return confirm('Are you sure you want to delete this user?');" 
                                           class="d-inline">
-                                        <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
-                                        <input type="hidden" name="id" value="<?php echo $u['id']; ?>">
+                                        <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                                        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
                                         <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </form>
+                                <?php else: ?>
+                                    <span class="text-muted small align-self-center">You</span>
                                 <?php endif; ?>
-                            <?php else: ?>
-                                <!-- Super Admin ට Edit/Delete බොත්තම් නෑ -->
-                                <span class="text-muted small">—</span>
-                            <?php endif; ?>
-                        </div>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-
-                <?php if (empty($users)): ?>
-                <tr>
-                    <td colspan="8" class="text-center text-muted py-4">No users found</td>
-                </tr>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
                 <?php endif; ?>
             </tbody>
         </table>
