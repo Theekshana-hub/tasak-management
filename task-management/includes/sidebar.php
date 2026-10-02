@@ -59,8 +59,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link <?php echo in_array($current_page, ['tasks.php','create-task.php','edit-task.php','task-details.php']) ? 'active' : ''; ?>" href="tasks.php">
+                <a class="nav-link <?php echo in_array($current_page, ['tasks.php','edit-task.php','task-details.php']) ? 'active' : ''; ?>" href="tasks.php">
                     <i class="bi bi-list-task"></i> All Tasks
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link <?php echo $current_page == 'create-task.php' ? 'active' : ''; ?>" href="create-task.php">
+                    <i class="bi bi-plus-circle"></i> Create Task
                 </a>
             </li>
             <li class="nav-item">
@@ -97,7 +102,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link <?php echo in_array($current_page, ['tasks.php','create-task.php','edit-task.php','task-details.php']) ? 'active' : ''; ?>" href="tasks.php">
+                <a class="nav-link <?php echo in_array($current_page, ['tasks.php','edit-task.php','task-details.php']) ? 'active' : ''; ?>" href="tasks.php">
                     <i class="bi bi-list-task"></i> All Tasks
                 </a>
             </li>
@@ -140,7 +145,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link <?php echo in_array($current_page, ['tasks.php','create-task.php','edit-task.php','task-details.php']) ? 'active' : ''; ?>" href="tasks.php">
+                <a class="nav-link <?php echo in_array($current_page, ['tasks.php','edit-task.php','task-details.php']) ? 'active' : ''; ?>" href="tasks.php">
                     <i class="bi bi-list-task"></i> Team Tasks
                 </a>
             </li>
@@ -170,6 +175,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <li class="nav-item">
                 <a class="nav-link <?php echo $current_page == 'my-tasks.php' ? 'active' : ''; ?>" href="my-tasks.php">
                     <i class="bi bi-list-task"></i> My Tasks
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link <?php echo $current_page == 'create-task.php' ? 'active' : ''; ?>" href="create-task.php?self=1">
+                    <i class="bi bi-plus-circle"></i> Assign to Myself
                 </a>
             </li>
             <li class="nav-item">
