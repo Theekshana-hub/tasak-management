@@ -10,7 +10,7 @@ $search      = trim($_GET['search'] ?? '');
 $section     = $_GET['section'] ?? '';
 $user        = $_GET['user'] ?? '';
 $assigned_by = $_GET['assigned_by'] ?? '';
-$status      = $_GET['status'] ?? '';
+$status      = strtoupper($_GET['status'] ?? '');   // dashboard link (status=overdue) also works now
 $priority    = $_GET['priority'] ?? '';
 $day_group   = $_GET['day_group'] ?? '';
 
@@ -28,15 +28,20 @@ function parseDayLabel($title) {
     return null;
 }
 
-$sql = "SELECT t.*, 
-               u.name AS assigned_name, 
-               s.name AS section_name, 
+/*
+ * FIX: INNER JOIN -> LEFT JOIN
+ * Super admin create karapu tasks walata section_id / assigned_to NULL wenna puluwan,
+ * INNER JOIN eken ewa hide wenawa. LEFT JOIN dammama okkoma penawa.
+ */
+$sql = "SELECT t.*,
+               COALESCE(u.name, '—')  AS assigned_name,
+               COALESCE(s.name, '—')  AS section_name,
                c.name AS assigned_by_name,
                c.role AS assigned_by_role
         FROM tasks t
-        JOIN users u ON u.id = t.assigned_to
-        JOIN sections s ON s.id = t.section_id
-        JOIN users c ON c.id = t.created_by
+        LEFT JOIN users u    ON u.id = t.assigned_to
+        LEFT JOIN sections s ON s.id = t.section_id
+        LEFT JOIN users c    ON c.id = t.created_by
         WHERE 1=1";
 $params = [];
 
@@ -107,7 +112,8 @@ $sections = $pdo->query("SELECT id, name FROM sections WHERE status='active' ORD
 
 $users = $pdo->query("SELECT id, name, section_id FROM users WHERE role='user' AND status='active' ORDER BY name")->fetchAll();
 
-$assigners_raw = $pdo->query("SELECT id, name, role FROM users WHERE role IN ('admin','coordinator') AND status='active' ORDER BY role, name")->fetchAll();
+// FIX: super_admin la ath "Assigned By" dropdown ekata add kala
+$assigners_raw = $pdo->query("SELECT id, name, role FROM users WHERE role IN ('super_admin','admin','coordinator') AND status='active' ORDER BY FIELD(role,'super_admin','admin','coordinator'), name")->fetchAll();
 $assigners = [];
 foreach ($assigners_raw as $a) {
     $section_ids = [];
@@ -122,6 +128,15 @@ foreach ($assigners_raw as $a) {
         'role'        => $a['role'],
         'section_ids' => $section_ids
     ];
+}
+
+function assignerRoleLabel($role) {
+    switch ($role) {
+        case 'super_admin': return 'Managing Director';
+        case 'admin':       return 'Admin';
+        case 'coordinator': return 'Coordinator';
+        default:            return ucfirst($role);
+    }
 }
 
 if (!function_exists('taskDate')) {
@@ -276,7 +291,7 @@ function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $statu
             <?php
             if ($day_group === '1') echo '1 Day tasks';
             elseif ($day_group === '7') echo '7 Days (Week) tasks';
-            else echo $day_group . ' Days tasks';
+            else echo e($day_group) . ' Days tasks';
             ?>
         </strong>
         (<?php echo count($tasks); ?>)
@@ -313,7 +328,7 @@ function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $statu
                         data-sections="<?php echo e(implode(',', $a['section_ids'])); ?>"
                         <?php echo $assigned_by == $a['id'] ? 'selected' : ''; ?>
                     >
-                        <?php echo e($a['name']); ?> (<?php echo $a['role'] === 'admin' ? 'Admin' : 'Coordinator'; ?>)
+                        <?php echo e($a['name']); ?> (<?php echo assignerRoleLabel($a['role']); ?>)
                     </option>
                     <?php endforeach; ?>
                 </select>
@@ -405,10 +420,14 @@ function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $statu
                     <td><?php echo e($t['section_name']); ?></td>
                     <td><?php echo e($t['assigned_name']); ?></td>
                     <td>
-                        <?php if (($t['assigned_by_role'] ?? '') === 'coordinator'): ?>
+                        <?php $abRole = $t['assigned_by_role'] ?? ''; ?>
+                        <?php if ($abRole === 'super_admin'): ?>
+                            <span class="badge bg-warning text-dark"><?php echo e($t['assigned_by_name']); ?></span>
+                            <small class="text-muted d-block">Managing Director</small>
+                        <?php elseif ($abRole === 'coordinator'): ?>
                             <span class="badge bg-info text-dark"><?php echo e($t['assigned_by_name']); ?></span>
                             <small class="text-muted d-block">Coordinator</small>
-                        <?php elseif (($t['assigned_by_role'] ?? '') === 'admin'): ?>
+                        <?php elseif ($abRole === 'admin'): ?>
                             <span class="badge bg-danger"><?php echo e($t['assigned_by_name']); ?></span>
                             <small class="text-muted d-block">Admin</small>
                         <?php else: ?>
@@ -483,7 +502,8 @@ function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $statu
                 opt.hidden = false;
                 return;
             }
-            if (role === 'admin') {
+            // admin & super_admin always visible
+            if (role === 'admin' || role === 'super_admin') {
                 opt.hidden = false;
                 return;
             }

@@ -58,6 +58,7 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h2 class="mb-0"><i class="bi bi-people"></i> All Users</h2>
+    <a href="add-user.php" class="btn btn-coral"><i class="bi bi-person-plus"></i> Add User</a>
 </div>
 
 <!-- ===== Filter Card ===== -->
@@ -68,8 +69,8 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
                 <label class="form-label small text-muted mb-1">Search</label>
                 <div class="input-group">
                     <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                    <input type="text" name="search" class="form-control" 
-                           placeholder="Name or Email..." 
+                    <input type="text" name="search" class="form-control"
+                           placeholder="Name or Email..."
                            value="<?php echo e($search); ?>">
                 </div>
             </div>
@@ -168,19 +169,19 @@ $sections = $pdo->query("SELECT id, name FROM sections ORDER BY name ASC")->fetc
                                         <?php echo e(ucfirst($u['status'])); ?>
                                     </span>
                                 </td>
-                                <td><?php echo date('Y-m-d', strtotime($u['created_at'])); ?></td>
+                                <td><?php echo !empty($u['created_at']) ? date('Y-m-d', strtotime($u['created_at'])) : '-'; ?></td>
                                 <td>
                                     <div class="d-flex gap-1">
                                         <!-- Edit Button -->
-                                        <a href="edit-user.php?id=<?php echo $u['id']; ?>" 
+                                        <a href="edit-user.php?id=<?php echo $u['id']; ?>"
                                            class="btn btn-sm btn-outline-primary" title="Edit">
                                             <i class="bi bi-pencil"></i>
                                         </a>
 
-                                        <!-- Delete Button (cannot delete yourself or other super_admins) -->
+                                        <!-- Delete Button -->
                                         <?php if ($u['id'] != $_SESSION['user_id'] && $u['role'] !== 'super_admin'): ?>
-                                            <form method="POST" action="../actions/delete-user.php" 
-                                                  onsubmit="return confirm('Are you sure you want to delete this user?');" 
+                                            <form method="POST" action="../actions/delete-user-super.php"
+                                                  onsubmit="return confirm('Are you sure you want to delete this user?');"
                                                   class="d-inline">
                                                 <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
                                                 <input type="hidden" name="id" value="<?php echo $u['id']; ?>">
