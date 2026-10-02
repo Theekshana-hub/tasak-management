@@ -5,14 +5,19 @@ require_once '../includes/header.php';
 require_once '../includes/sidebar.php';
 
 $pdo = getDB();
-$coord_id = $_SESSION['user_id'];
+$coord_id = (int)$_SESSION['user_id'];
 
 $search    = trim($_GET['search'] ?? '');
 $status    = $_GET['status'] ?? '';
 $agent     = $_GET['agent'] ?? '';
 $day_group = $_GET['day_group'] ?? '';
+$today     = date('Y-m-d');
 
-$today = date('Y-m-d');
+// Coordinator ගේ section එක
+$stmt = $pdo->prepare("SELECT section_id FROM users WHERE id = ? AND role = 'coordinator' LIMIT 1");
+$stmt->execute([$coord_id]);
+$coord_section_id = $stmt->fetchColumn();
+$coord_section_id = ($coord_section_id !== false && $coord_section_id !== null) ? (int)$coord_section_id : null;
 
 function parseDayLabel($title) {
     if (preg_match('/\(Day\s*(\d+)\s*\/\s*(\d+)\s*[–\-]\s*([^)]+)\)/i', $title ?? '', $m)) {
@@ -26,14 +31,31 @@ function parseDayLabel($title) {
     return null;
 }
 
-$sql = "
-    SELECT t.*, u.name AS assigned_name, s.name AS section_name
-    FROM tasks t
-    JOIN users u ON u.id = t.assigned_to
-    JOIN sections s ON s.id = t.section_id
-    WHERE u.coordinator_id = ?
-";
-$params = [$coord_id];
+// ===== Department scope =====
+// Same section එකේ ඕනෑම coordinator කෙනෙක් assign කරපු task, 
+// ඒ section එකේ හැම coordinator ටම පේනවා.
+// (agent ගේ section එක හෝ task එකේ section එක coordinator ගේ section එකට match වුණොත්)
+if ($coord_section_id) {
+    $sql = "
+        SELECT t.*, u.name AS assigned_name, s.name AS section_name
+        FROM tasks t
+        JOIN users u ON u.id = t.assigned_to
+        LEFT JOIN sections s ON s.id = t.section_id
+        WHERE u.role = 'user'
+          AND (u.section_id = ? OR t.section_id = ?)
+    ";
+    $params = [$coord_section_id, $coord_section_id];
+} else {
+    // No section assigned → show nothing
+    $sql = "
+        SELECT t.*, u.name AS assigned_name, s.name AS section_name
+        FROM tasks t
+        JOIN users u ON u.id = t.assigned_to
+        LEFT JOIN sections s ON s.id = t.section_id
+        WHERE 1 = 0
+    ";
+    $params = [];
+}
 
 if ($search !== '') {
     $sql .= " AND (t.title LIKE ? OR t.description LIKE ?)";
@@ -87,9 +109,19 @@ foreach ($all_tasks as $t) {
     }
 }
 
-$agents_stmt = $pdo->prepare("SELECT id, name FROM users WHERE coordinator_id = ? AND role = 'user' ORDER BY name");
-$agents_stmt->execute([$coord_id]);
-$agents = $agents_stmt->fetchAll();
+// Agents in same section (for filter dropdown)
+if ($coord_section_id) {
+    $agents_stmt = $pdo->prepare("
+        SELECT id, name 
+        FROM users 
+        WHERE role = 'user' AND status = 'active' AND section_id = ?
+        ORDER BY name ASC
+    ");
+    $agents_stmt->execute([$coord_section_id]);
+    $agents = $agents_stmt->fetchAll();
+} else {
+    $agents = [];
+}
 
 function dayGroupUrlCoord($group, $search, $status, $agent) {
     $q = [];
@@ -105,6 +137,12 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
     <h2 class="mb-0"><i class="bi bi-list-task"></i> Team Tasks</h2>
     <a href="create-task.php" class="btn btn-coral"><i class="bi bi-plus-lg"></i> Assign Task</a>
 </div>
+
+<?php if (!$coord_section_id): ?>
+<div class="alert alert-warning mb-4">
+    No department/section assigned to you. Please contact Admin.
+</div>
+<?php endif; ?>
 
 <?php if (isset($_GET['updated'])): ?>
 <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -227,7 +265,7 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
                 <select name="agent" class="form-select">
                     <option value="">All Agents</option>
                     <?php foreach ($agents as $a): ?>
-                    <option value="<?php echo $a['id']; ?>" <?php echo $agent == $a['id'] ? 'selected' : ''; ?>>
+                    <option value="<?php echo (int)$a['id']; ?>" <?php echo $agent == $a['id'] ? 'selected' : ''; ?>>
                         <?php echo e($a['name']); ?>
                     </option>
                     <?php endforeach; ?>
@@ -269,8 +307,8 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
             </thead>
             <tbody>
                 <?php foreach ($tasks as $t):
-                    $dayInfo  = parseDayLabel($t['title'] ?? '');
-                    $isToday  = (!empty($t['due_date']) && $t['due_date'] === $today);
+                    $dayInfo   = parseDayLabel($t['title'] ?? '');
+                    $isToday   = (!empty($t['due_date']) && $t['due_date'] === $today);
                     $isOverdue = (!empty($t['due_date']) && $t['due_date'] < $today && $t['status'] !== 'COMPLETED');
                 ?>
                 <tr class="<?php echo $isOverdue ? 'table-danger' : ($isToday ? 'table-warning' : ''); ?>">
@@ -296,7 +334,7 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
                         <?php endif; ?>
                     </td>
                     <td><?php echo e($t['assigned_name']); ?></td>
-                    <td><?php echo e($t['section_name']); ?></td>
+                    <td><?php echo e($t['section_name'] ?? '—'); ?></td>
                     <td><?php echo priorityBadge($t['priority']); ?></td>
                     <td><?php echo formatDate($t['due_date'] ?? $t['start_date'] ?? null); ?></td>
                     <td><?php echo statusBadge($t['status'], $t['due_date']); ?></td>
@@ -316,7 +354,6 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
                     </td>
                 </tr>
                 <?php endforeach; ?>
-
                 <?php if (empty($tasks)): ?>
                 <tr>
                     <td colspan="9" class="text-center text-muted py-4">No tasks found</td>
