@@ -31,10 +31,7 @@ function parseDayLabel($title) {
     return null;
 }
 
-// ===== Department scope =====
-// Same section එකේ ඕනෑම coordinator කෙනෙක් assign කරපු task, 
-// ඒ section එකේ හැම coordinator ටම පේනවා.
-// (agent ගේ section එක හෝ task එකේ section එක coordinator ගේ section එකට match වුණොත්)
+// Department scope: same section agents' tasks
 if ($coord_section_id) {
     $sql = "
         SELECT t.*, u.name AS assigned_name, s.name AS section_name
@@ -46,7 +43,6 @@ if ($coord_section_id) {
     ";
     $params = [$coord_section_id, $coord_section_id];
 } else {
-    // No section assigned → show nothing
     $sql = "
         SELECT t.*, u.name AS assigned_name, s.name AS section_name
         FROM tasks t
@@ -64,9 +60,8 @@ if ($search !== '') {
     $params[] = $like;
 }
 
-// ===== Status Filter (including Overdue) =====
 if ($status === 'OVERDUE') {
-    $sql .= " AND t.due_date < ? AND t.status != 'COMPLETED'";
+    $sql .= " AND t.due_date < ? AND t.status NOT IN ('COMPLETED','CANCELLED')";
     $params[] = $today;
 } elseif ($status !== '') {
     $sql .= " AND t.status = ?";
@@ -84,7 +79,6 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $all_tasks = $stmt->fetchAll();
 
-// Day group counts
 $group_counts = ['1' => 0, '3' => 0, '5' => 0, '7' => 0, '14' => 0, 'other' => 0];
 $tasks = [];
 
@@ -109,7 +103,6 @@ foreach ($all_tasks as $t) {
     }
 }
 
-// Agents in same section (for filter dropdown)
 if ($coord_section_id) {
     $agents_stmt = $pdo->prepare("
         SELECT id, name 
@@ -159,12 +152,12 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
 <?php elseif (isset($_GET['error'])): ?>
 <div class="alert alert-danger alert-dismissible fade show" role="alert">
     <?php
-    switch ($_GET['error']) {
-        case 'not_found':       echo 'Task not found.'; break;
-        case 'not_allowed':     echo 'You are not allowed to delete this task.'; break;
-        case 'delete_failed':   echo 'Could not delete task — it may have related records.'; break;
-        case 'invalid_id':      echo 'Invalid task ID.'; break;
-        default:                echo 'Something went wrong.';
+    switch ($_GET['error'] ?? '') {
+        case 'not_found':     echo 'Task not found.'; break;
+        case 'not_allowed':   echo 'You are not allowed to modify this task.'; break;
+        case 'delete_failed': echo 'Could not delete task — it may have related records.'; break;
+        case 'invalid_id':    echo 'Invalid task ID.'; break;
+        default:              echo 'Something went wrong.';
     }
     ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -173,66 +166,28 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
 
 <!-- Day Group Cards -->
 <div class="row g-3 mb-4">
+    <?php
+    $cards = [
+        ''   => ['label' => 'All Tasks', 'count' => count($all_tasks), 'class' => 'text-dark'],
+        '1'  => ['label' => '1 Day', 'count' => (int)$group_counts['1'], 'class' => 'text-primary'],
+        '3'  => ['label' => '3 Days', 'count' => (int)$group_counts['3'], 'class' => 'text-info'],
+        '5'  => ['label' => '5 Days', 'count' => (int)$group_counts['5'], 'class' => 'text-secondary'],
+        '7'  => ['label' => '7 Days (Week)', 'count' => (int)$group_counts['7'], 'class' => 'text-success'],
+        '14' => ['label' => '14 Days', 'count' => (int)$group_counts['14'], 'class' => 'text-danger'],
+    ];
+    foreach ($cards as $key => $c):
+    ?>
     <div class="col-6 col-md-2">
-        <a href="<?php echo e(dayGroupUrlCoord('', $search, $status, $agent)); ?>" class="text-decoration-none">
-            <div class="card border-0 shadow-sm h-100 <?php echo $day_group===''?'border border-primary':''; ?>">
+        <a href="<?= e(dayGroupUrlCoord($key, $search, $status, $agent)) ?>" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 <?= $day_group === $key ? 'border border-primary' : '' ?>">
                 <div class="card-body text-center py-3">
-                    <div class="fs-4 fw-bold text-dark"><?php echo count($all_tasks); ?></div>
-                    <div class="small text-muted">All Tasks</div>
+                    <div class="fs-4 fw-bold <?= $c['class'] ?>"><?= $c['count'] ?></div>
+                    <div class="small text-muted"><?= $c['label'] ?></div>
                 </div>
             </div>
         </a>
     </div>
-    <div class="col-6 col-md-2">
-        <a href="<?php echo e(dayGroupUrlCoord('1', $search, $status, $agent)); ?>" class="text-decoration-none">
-            <div class="card border-0 shadow-sm h-100 <?php echo $day_group==='1'?'border border-primary':''; ?>">
-                <div class="card-body text-center py-3">
-                    <div class="fs-4 fw-bold text-primary"><?php echo (int)$group_counts['1']; ?></div>
-                    <div class="small text-muted">1 Day</div>
-                </div>
-            </div>
-        </a>
-    </div>
-    <div class="col-6 col-md-2">
-        <a href="<?php echo e(dayGroupUrlCoord('3', $search, $status, $agent)); ?>" class="text-decoration-none">
-            <div class="card border-0 shadow-sm h-100 <?php echo $day_group==='3'?'border border-primary':''; ?>">
-                <div class="card-body text-center py-3">
-                    <div class="fs-4 fw-bold text-info"><?php echo (int)$group_counts['3']; ?></div>
-                    <div class="small text-muted">3 Days</div>
-                </div>
-            </div>
-        </a>
-    </div>
-    <div class="col-6 col-md-2">
-        <a href="<?php echo e(dayGroupUrlCoord('5', $search, $status, $agent)); ?>" class="text-decoration-none">
-            <div class="card border-0 shadow-sm h-100 <?php echo $day_group==='5'?'border border-primary':''; ?>">
-                <div class="card-body text-center py-3">
-                    <div class="fs-4 fw-bold text-secondary"><?php echo (int)$group_counts['5']; ?></div>
-                    <div class="small text-muted">5 Days</div>
-                </div>
-            </div>
-        </a>
-    </div>
-    <div class="col-6 col-md-2">
-        <a href="<?php echo e(dayGroupUrlCoord('7', $search, $status, $agent)); ?>" class="text-decoration-none">
-            <div class="card border-0 shadow-sm h-100 <?php echo $day_group==='7'?'border border-primary':''; ?>">
-                <div class="card-body text-center py-3">
-                    <div class="fs-4 fw-bold text-success"><?php echo (int)$group_counts['7']; ?></div>
-                    <div class="small text-muted">7 Days (Week)</div>
-                </div>
-            </div>
-        </a>
-    </div>
-    <div class="col-6 col-md-2">
-        <a href="<?php echo e(dayGroupUrlCoord('14', $search, $status, $agent)); ?>" class="text-decoration-none">
-            <div class="card border-0 shadow-sm h-100 <?php echo $day_group==='14'?'border border-primary':''; ?>">
-                <div class="card-body text-center py-3">
-                    <div class="fs-4 fw-bold text-danger"><?php echo (int)$group_counts['14']; ?></div>
-                    <div class="small text-muted">14 Days</div>
-                </div>
-            </div>
-        </a>
-    </div>
+    <?php endforeach; ?>
 </div>
 
 <?php if ($day_group !== ''): ?>
@@ -245,7 +200,7 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
             else echo $day_group . ' Days tasks';
             ?>
         </strong>
-        (<?php echo count($tasks); ?>)
+        (<?= count($tasks) ?>)
     </span>
     <a href="tasks.php" class="btn btn-sm btn-outline-secondary">Show All</a>
 </div>
@@ -255,18 +210,18 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
 <form method="GET" class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <?php if ($day_group !== ''): ?>
-            <input type="hidden" name="day_group" value="<?php echo e($day_group); ?>">
+            <input type="hidden" name="day_group" value="<?= e($day_group) ?>">
         <?php endif; ?>
         <div class="row g-2">
             <div class="col-md-3">
-                <input type="text" name="search" class="form-control" placeholder="Search..." value="<?php echo e($search); ?>">
+                <input type="text" name="search" class="form-control" placeholder="Search..." value="<?= e($search) ?>">
             </div>
             <div class="col-md-3">
                 <select name="agent" class="form-select">
                     <option value="">All Agents</option>
                     <?php foreach ($agents as $a): ?>
-                    <option value="<?php echo (int)$a['id']; ?>" <?php echo $agent == $a['id'] ? 'selected' : ''; ?>>
-                        <?php echo e($a['name']); ?>
+                    <option value="<?= (int)$a['id'] ?>" <?= $agent == $a['id'] ? 'selected' : '' ?>>
+                        <?= e($a['name']) ?>
                     </option>
                     <?php endforeach; ?>
                 </select>
@@ -274,15 +229,15 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
             <div class="col-md-3">
                 <select name="status" class="form-select">
                     <option value="">All Status</option>
-                    <option value="PENDING"     <?php echo $status==='PENDING'?'selected':''; ?>>Pending</option>
-                    <option value="IN_PROGRESS" <?php echo $status==='IN_PROGRESS'?'selected':''; ?>>In Progress</option>
-                    <option value="COMPLETED"   <?php echo $status==='COMPLETED'?'selected':''; ?>>Completed</option>
-                    <option value="OVERDUE"     <?php echo $status==='OVERDUE'?'selected':''; ?>>Overdue</option>
+                    <option value="PENDING" <?= $status==='PENDING'?'selected':'' ?>>Pending</option>
+                    <option value="IN_PROGRESS" <?= $status==='IN_PROGRESS'?'selected':'' ?>>In Progress</option>
+                    <option value="COMPLETED" <?= $status==='COMPLETED'?'selected':'' ?>>Completed</option>
+                    <option value="OVERDUE" <?= $status==='OVERDUE'?'selected':'' ?>>Overdue</option>
                 </select>
             </div>
             <div class="col-md-3">
                 <button type="submit" class="btn btn-navy bg-navy text-white">Filter</button>
-                <a href="tasks.php<?php echo $day_group!==''?'?day_group='.urlencode($day_group):''; ?>" class="btn btn-outline-secondary">Reset</a>
+                <a href="tasks.php<?= $day_group!==''?'?day_group='.urlencode($day_group):'' ?>" class="btn btn-outline-secondary">Reset</a>
             </div>
         </div>
     </div>
@@ -302,22 +257,25 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
                     <th>Priority</th>
                     <th>Date</th>
                     <th>Status</th>
-                    <th>Action</th>
+                    <th style="width:140px;">Action</th>
                 </tr>
             </thead>
             <tbody>
+                <?php if (empty($tasks)): ?>
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-4">No tasks found</td>
+                </tr>
+                <?php else: ?>
                 <?php foreach ($tasks as $t):
                     $dayInfo   = parseDayLabel($t['title'] ?? '');
                     $isToday   = (!empty($t['due_date']) && $t['due_date'] === $today);
-                    $isOverdue = (!empty($t['due_date']) && $t['due_date'] < $today && $t['status'] !== 'COMPLETED');
+                    $isOverdue = (!empty($t['due_date']) && $t['due_date'] < $today && !in_array($t['status'], ['COMPLETED','CANCELLED'], true));
                 ?>
-                <tr class="<?php echo $isOverdue ? 'table-danger' : ($isToday ? 'table-warning' : ''); ?>">
+                <tr class="<?= $isOverdue ? 'table-danger' : ($isToday ? 'table-warning' : '') ?>">
+                    <td><?= !empty($t['created_at']) ? formatDate($t['created_at']) : '—' ?></td>
                     <td>
-                        <?php echo !empty($t['created_at']) ? formatDate($t['created_at']) : '—'; ?>
-                    </td>
-                    <td>
-                        <a href="task-details.php?id=<?php echo (int)$t['id']; ?>" class="text-decoration-none fw-semibold">
-                            <?php echo e($dayInfo ? $dayInfo['base'] : $t['title']); ?>
+                        <a href="task-details.php?id=<?= (int)$t['id'] ?>" class="text-decoration-none fw-semibold">
+                            <?= e($dayInfo ? $dayInfo['base'] : $t['title']) ?>
                         </a>
                         <?php if ($isToday): ?>
                             <span class="badge bg-warning text-dark ms-1">Today</span>
@@ -328,36 +286,43 @@ function dayGroupUrlCoord($group, $search, $status, $agent) {
                     </td>
                     <td>
                         <?php if ($dayInfo): ?>
-                            <span class="badge bg-primary">Day <?php echo $dayInfo['day']; ?>/<?php echo $dayInfo['total']; ?></span>
+                            <span class="badge bg-primary">Day <?= $dayInfo['day'] ?>/<?= $dayInfo['total'] ?></span>
                         <?php else: ?>
                             <span class="badge bg-secondary">1 Day</span>
                         <?php endif; ?>
                     </td>
-                    <td><?php echo e($t['assigned_name']); ?></td>
-                    <td><?php echo e($t['section_name'] ?? '—'); ?></td>
-                    <td><?php echo priorityBadge($t['priority']); ?></td>
-                    <td><?php echo formatDate($t['due_date'] ?? $t['start_date'] ?? null); ?></td>
-                    <td><?php echo statusBadge($t['status'], $t['due_date']); ?></td>
+                    <td><?= e($t['assigned_name']) ?></td>
+                    <td><?= e($t['section_name'] ?? '—') ?></td>
+                    <td><?= priorityBadge($t['priority']) ?></td>
+                    <td><?= formatDate($t['due_date'] ?? $t['start_date'] ?? null) ?></td>
+                    <td><?= statusBadge($t['status'], $t['due_date']) ?></td>
                     <td>
-                        <a href="task-details.php?id=<?php echo (int)$t['id']; ?>" class="btn btn-sm btn-outline-primary" title="View">
-                            <i class="bi bi-eye"></i>
-                        </a>
-                        <a href="edit-task.php?id=<?php echo (int)$t['id']; ?>" class="btn btn-sm btn-outline-secondary" title="Edit">
-                            <i class="bi bi-pencil"></i>
-                        </a>
-                        <a href="delete-task.php?id=<?php echo (int)$t['id']; ?>"
-                           class="btn btn-sm btn-outline-danger"
-                           title="Delete"
-                           onclick="return confirm('Delete this task? This cannot be undone.');">
-                           <i class="bi bi-trash"></i>
-                        </a>
+                        <div class="d-flex gap-1">
+                            <!-- View -->
+                            <a href="task-details.php?id=<?= (int)$t['id'] ?>"
+                               class="btn btn-sm btn-outline-primary" title="View">
+                                <i class="bi bi-eye"></i>
+                            </a>
+
+                            <!-- Edit -->
+                            <a href="edit-task.php?id=<?= (int)$t['id'] ?>"
+                               class="btn btn-sm btn-outline-secondary" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+
+                            <!-- Delete (POST + CSRF) -->
+                            <form method="POST" action="../actions/delete-task-coord.php" class="d-inline"
+                                  onsubmit="return confirm('Delete this task? This cannot be undone.');">
+                                <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+                                <input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 <?php endforeach; ?>
-                <?php if (empty($tasks)): ?>
-                <tr>
-                    <td colspan="9" class="text-center text-muted py-4">No tasks found</td>
-                </tr>
                 <?php endif; ?>
             </tbody>
         </table>
