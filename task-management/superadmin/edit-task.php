@@ -1,7 +1,5 @@
 <?php
-// ============================================
-// 1. Auth + DB (no HTML yet)
-// ============================================
+
 require_once '../includes/admin_auth.php';
 
 $pdo = getDB();
@@ -24,9 +22,7 @@ if (!$task) {
 $sections = $pdo->query("SELECT id, name FROM sections WHERE status = 'active' ORDER BY name")->fetchAll();
 $users    = $pdo->query("SELECT id, name FROM users WHERE role = 'user' AND status = 'active' ORDER BY name")->fetchAll();
 
-// ============================================
-// 2. NOW safe to include header / sidebar
-// ============================================
+
 $page_title = 'Edit Task';
 require_once '../includes/header.php';
 require_once '../includes/sidebar.php';

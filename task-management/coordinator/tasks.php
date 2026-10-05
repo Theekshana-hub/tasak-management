@@ -13,7 +13,7 @@ $agent     = $_GET['agent'] ?? '';
 $day_group = $_GET['day_group'] ?? '';
 $today     = date('Y-m-d');
 
-// Coordinator ගේ section එක
+
 $stmt = $pdo->prepare("SELECT section_id FROM users WHERE id = ? AND role = 'coordinator' LIMIT 1");
 $stmt->execute([$coord_id]);
 $coord_section_id = $stmt->fetchColumn();
@@ -31,7 +31,7 @@ function parseDayLabel($title) {
     return null;
 }
 
-// Department scope: same section agents' tasks
+
 if ($coord_section_id) {
     $sql = "
         SELECT t.*, u.name AS assigned_name, s.name AS section_name

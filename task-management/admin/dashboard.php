@@ -7,7 +7,6 @@ require_once '../includes/sidebar.php';
 $pdo   = getDB();
 $today = date('Y-m-d');
 
-/* ===================== HELPERS ===================== */
 
 function parseDayLabelDash($title) {
     if (preg_match('/\(Day\s*(\d+)\s*\/\s*(\d+)\s*[–\-]\s*([^)]+)\)/i', $title ?? '', $m)) {
@@ -38,7 +37,7 @@ function statusBadgeClass($status) {
     };
 }
 
-/* ===================== OVERALL STATS (Super Admin tasks exclude) ===================== */
+
 
 $total_tasks = $pdo->query("
     SELECT COUNT(*) 
@@ -90,7 +89,7 @@ $overdue = $pdo->query("
       AND (c.role IS NULL OR c.role != 'super_admin')
 ")->fetchColumn();
 
-/* ===================== TODAY'S TASKS (Super Admin exclude) ===================== */
+
 
 $stmt = $pdo->prepare("
     SELECT t.*, 
@@ -118,7 +117,7 @@ foreach ($today_tasks as $tt) {
     elseif ($tt['status'] === 'COMPLETED')   $today_completed++;
 }
 
-/* ===================== OVERDUE TASKS ===================== */
+
 
 $overdue_tasks = $pdo->query("
     SELECT t.*, 
@@ -135,7 +134,7 @@ $overdue_tasks = $pdo->query("
     LIMIT 10
 ")->fetchAll();
 
-/* ===================== SECTION STATS (TODAY ONLY) ===================== */
+
 
 $section_stats = $pdo->query("
     SELECT
@@ -156,7 +155,7 @@ $section_stats = $pdo->query("
     ORDER BY s.name ASC
 ")->fetchAll();
 
-/* ===================== RECENT TASKS ===================== */
+
 
 $recent_tasks = $pdo->query("
     SELECT t.*, 
@@ -177,7 +176,7 @@ $recent_tasks = $pdo->query("
     <a href="create-task.php" class="btn btn-coral"><i class="bi bi-plus-lg"></i> Create Task</a>
 </div>
 
-<!-- Stats Cards -->
+
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-4 col-xl-2">
         <div class="card stat-card h-100">
@@ -259,7 +258,7 @@ $recent_tasks = $pdo->query("
     </div>
 </div>
 
-<!-- ===== TODAY'S TASKS ===== -->
+
 <div class="card border-0 shadow-sm mb-4 border-start border-4 border-warning">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <span class="fw-semibold">
@@ -347,7 +346,7 @@ $recent_tasks = $pdo->query("
     </div>
 </div>
 
-<!-- ===== SECTION-WISE BREAKDOWN (TODAY ONLY) ===== -->
+
 <div class="card border-0 shadow-sm mb-4 border-start border-4 border-info">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <span class="fw-semibold">
@@ -425,7 +424,7 @@ $recent_tasks = $pdo->query("
     </div>
 </div>
 
-<!-- ===== OVERDUE TASKS ===== -->
+
 <div class="card border-0 shadow-sm mb-4 border-start border-4 border-danger">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <span class="fw-semibold">
@@ -478,7 +477,7 @@ $recent_tasks = $pdo->query("
 </div>
 
 <div class="row g-4">
-    <!-- Recent Tasks -->
+
     <div class="col-12">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between">

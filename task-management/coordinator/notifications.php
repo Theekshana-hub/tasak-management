@@ -1,13 +1,13 @@
 <?php
 $page_title = 'Notifications';
 
-// Coordinator auth - NOT user_auth
+
 require_once '../includes/coordinator_auth.php';
 
 $pdo = getDB();
 $user_id = $_SESSION['user_id'];
 
-// Redirect BEFORE header/sidebar
+
 if (isset($_GET['mark_all'])) {
     $stmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ?");
     $stmt->execute([$user_id]);

@@ -13,7 +13,7 @@ $status   = $_GET['status'] ?? '';
 $priority = $_GET['priority'] ?? '';
 $section  = $_GET['section'] ?? '';
 
-// LEFT JOIN — section/created_by NULL උනත් පෙනෙනවා
+
 $sql = "SELECT t.*,
                s.name AS section_name,
                c.name AS assigned_by_name,

@@ -1,13 +1,13 @@
 <?php
 $page_title = 'Create My Task';
-// NOTE: change this to the same auth include your other user pages (e.g. my-tasks.php) use
+
 require_once '../includes/user_auth.php';
 require_once '../includes/header.php';
 require_once '../includes/sidebar.php';
 
 $pdo = getDB();
 
-// Only Agents (role = 'user') should use this page
+
 if (($_SESSION['user_role'] ?? '') !== 'user') {
     header('Location: dashboard.php');
     exit;
@@ -15,7 +15,6 @@ if (($_SESSION['user_role'] ?? '') !== 'user') {
 
 $my_id = (int)($_SESSION['user_id'] ?? 0);
 
-// Logged-in user's own details
 $stmt = $pdo->prepare("SELECT id, name, section_id FROM users WHERE id = ? AND status = 'active' LIMIT 1");
 $stmt->execute([$my_id]);
 $me = $stmt->fetch();
@@ -37,11 +36,11 @@ $sections = $pdo->query("SELECT id, name FROM sections WHERE status = 'active' O
     <div class="card-body">
         <form method="POST" action="../actions/create-task.php" enctype="multipart/form-data" id="taskForm">
             <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
-            <!-- Always assigned to the logged-in user (server must re-check this) -->
+           
             <input type="hidden" name="assigned_to[]" value="<?php echo (int)$me['id']; ?>">
             <input type="hidden" name="self_assign" value="1">
 
-            <!-- Section + Assigned to (self) -->
+          
             <div class="row g-3 mb-4">
                 <div class="col-md-6">
                     <label class="form-label">Section <span class="text-muted">(optional)</span></label>
@@ -150,7 +149,7 @@ const addTaskBtn     = document.getElementById('addTaskBtn');
 
 let taskIndex = 0;
 
-// ---------- Due date calculation per task block ----------
+
 function calcDueDate(block) {
     const startInput = block.querySelector('.start-date');
     const daysSelect = block.querySelector('.duration-days');
@@ -174,7 +173,7 @@ function bindDateEvents(block) {
     calcDueDate(block);
 }
 
-// Initial task
+
 bindDateEvents(tasksContainer.querySelector('.task-block'));
 
 // Add another task

@@ -5,16 +5,14 @@ require_once '../includes/functions.php';
 
 $role = $_SESSION['user_role'] ?? '';
 
-// Allow admin, super_admin OR user (agent - self assign only)
+
 if (!isset($_SESSION['user_id']) || !in_array($role, ['admin', 'super_admin', 'user'], true)) {
     setFlash('danger', 'Access denied.');
     redirect('../login.php');
 }
 
-$is_self_only = ($role === 'user'); // Agents can ONLY assign to themselves
+$is_self_only = ($role === 'user'); 
 
-// Redirect paths based on role
-// NOTE: 'user' folder name eka oyage project eke agent folder ekata maru karanna
 if ($role === 'super_admin') {
     $back_create = '../superadmin/create-task.php';
     $back_tasks  = '../superadmin/tasks.php';
@@ -32,18 +30,18 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !verifyCSRFToken($_POST['csrf_token
 }
 
 $section_id  = (int)($_POST['section_id'] ?? 0);
-$section_id  = $section_id > 0 ? $section_id : null; // optional
+$section_id  = $section_id > 0 ? $section_id : null;
 $assigned_to = $_POST['assigned_to'] ?? [];
 $tasks       = $_POST['tasks'] ?? [];
 $created_by  = (int)$_SESSION['user_id'];
 
-// Support single or multi select
+
 if (!is_array($assigned_to)) {
     $assigned_to = $assigned_to !== '' ? [(int)$assigned_to] : [];
 }
 $assigned_to = array_values(array_unique(array_filter(array_map('intval', $assigned_to))));
 
-// Agents: ignore whatever the browser sent, always assign to themselves
+
 if ($is_self_only) {
     $assigned_to = [$created_by];
 }
@@ -58,7 +56,7 @@ if (empty($tasks) || !is_array($tasks)) {
     redirect($back_create);
 }
 
-// ---------- Clean tasks ----------
+
 function isValidDate($d) {
     $dt = DateTime::createFromFormat('Y-m-d', (string)$d);
     return $dt && $dt->format('Y-m-d') === $d;
@@ -79,7 +77,7 @@ foreach ($tasks as $t) {
     $start = (!empty($t['start_date']) && isValidDate($t['start_date'])) ? $t['start_date'] : date('Y-m-d');
     $days  = max(1, (int)($t['duration_days'] ?? 1));
 
-    // Due date: form එකෙන් එන එක use කරනවා, නැත්නම් start + duration එකෙන් හදනවා
+    
     if (!empty($t['due_date']) && isValidDate($t['due_date'])) {
         $due = $t['due_date'];
     } else {
@@ -102,7 +100,7 @@ if (empty($clean_tasks)) {
 
 $pdo = getDB();
 
-// Validate section only if provided
+
 if ($section_id !== null) {
     $stmt = $pdo->prepare("SELECT id FROM sections WHERE id = ? AND status = 'active'");
     $stmt->execute([$section_id]);
@@ -112,7 +110,7 @@ if ($section_id !== null) {
     }
 }
 
-// ---------- Attachment (එක පාරක් upload කරලා හැම task එකටම use කරනවා) ----------
+
 $attachment = null;
 if (!empty($_FILES['attachment']['name'])) {
     $upload = uploadFile($_FILES['attachment'], '../uploads/task-files/');
@@ -124,17 +122,17 @@ if (!empty($_FILES['attachment']['name'])) {
     }
 }
 
-// Who can be assigned?
+
 if ($role === 'super_admin') {
-    // Managing Director can assign to anyone including self
+    
     $allowed_roles = ['super_admin', 'admin', 'coordinator', 'user'];
     $creator_label = 'Managing Director';
 } elseif ($role === 'admin') {
-    // Admin cannot assign to Managing Director
+    
     $allowed_roles = ['admin', 'coordinator', 'user'];
     $creator_label = 'Management';
 } else {
-    // Agent can only assign to self (their own role)
+   
     $allowed_roles = ['user'];
     $creator_label = 'Agent (self-assigned)';
 }
@@ -163,7 +161,7 @@ try {
     $pdo->beginTransaction();
 
     foreach ($assigned_to as $person_id) {
-        // Extra safety: agents can never create a task for someone else
+       
         if ($is_self_only && $person_id !== $created_by) {
             continue;
         }
@@ -172,11 +170,11 @@ try {
         $person = $personStmt->fetch();
 
         if (!$person) {
-            continue; // invalid / not allowed
+            continue;
         }
         $people_count++;
 
-        // හැම person කෙනෙක්ටම හැම task එකක්ම
+        
         foreach ($clean_tasks as $task) {
             $insertStmt->execute([
                 $task['title'],
@@ -199,7 +197,7 @@ try {
                 "Task created by $creator_label and assigned to " . $person['name'] . " (" . $person['role'] . ")"
             );
 
-            // Agents don't need a notification for their own task
+           
             if (!$is_self_only) {
                 createNotification(
                     $pdo,

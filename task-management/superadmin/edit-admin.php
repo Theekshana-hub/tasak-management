@@ -2,15 +2,15 @@
 session_start();
 require_once '../config/database.php';
 require_once '../includes/functions.php';
-require_once '../includes/super_admin_auth.php';   // auth only (no HTML)
+require_once '../includes/super_admin_auth.php';   
 
 $pdo = getDB();
 $id = (int)($_GET['id'] ?? 0);
 
-// ===== Validation & Redirects (BEFORE any HTML) =====
+
 if ($id <= 0) {
     setFlash('danger', 'Invalid admin ID.');
-    redirect('admins.php');   // මෙතන හරි
+    redirect('admins.php');   
 }
 
 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ? AND role IN ('admin', 'super_admin')");
@@ -22,22 +22,22 @@ if (!$admin) {
     redirect('admins.php');
 }
 
-// ===== Form Submit Handling (if POST) =====
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // ... your update logic here ...
 
-    // success or error
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+
+
     setFlash('success', 'Admin updated successfully.');
-    redirect('admins.php');   // මෙතනත් හරි
+    redirect('admins.php');   
 }
 
-// ===== මෙතනින් පස්සේ විතරක් HTML start කරන්න =====
+
 $page_title = 'Edit Admin';
 require_once '../includes/header.php';
 require_once '../includes/sidebar.php';
 ?>
 
-<!-- ඔයාගේ form HTML එක මෙතනින් පටන් ගන්න -->
+
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0"><i class="bi bi-pencil"></i> Edit Admin</h2>

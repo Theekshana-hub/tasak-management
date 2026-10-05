@@ -1,3 +1,4 @@
+
 <?php
 session_start();
 require_once '../config/database.php';
@@ -27,7 +28,7 @@ if ($id <= 0) {
 
 $pdo = getDB();
 
-// Coordinator section
+
 $stmt = $pdo->prepare("SELECT section_id FROM users WHERE id = ? AND role = 'coordinator' LIMIT 1");
 $stmt->execute([$coord_id]);
 $coord_section_id = $stmt->fetchColumn();
@@ -37,7 +38,7 @@ if (!$coord_section_id) {
     redirect('../coordinator/tasks.php?error=not_allowed');
 }
 
-// Task must be in coordinator's department
+
 $stmt = $pdo->prepare("
     SELECT t.id
     FROM tasks t

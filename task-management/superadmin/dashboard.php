@@ -7,7 +7,7 @@ require_once '../includes/sidebar.php';
 $pdo   = getDB();
 $today = date('Y-m-d');
 
-/* ===================== HELPERS ===================== */
+
 
 function parseDayLabelDash($title) {
     if (preg_match('/\(Day\s*(\d+)\s*\/\s*(\d+)\s*[–\-]\s*([^)]+)\)/i', $title ?? '', $m)) {
@@ -58,7 +58,7 @@ function statusBadgeClass($status) {
     };
 }
 
-/* ===================== COUNTS ===================== */
+
 
 $total_admins       = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
 $total_coordinators = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'coordinator'")->fetchColumn();
@@ -69,7 +69,7 @@ $in_progress        = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'IN
 $completed          = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'COMPLETED'")->fetchColumn();
 $overdue            = $pdo->query("SELECT COUNT(*) FROM tasks WHERE due_date < CURDATE() AND status NOT IN ('COMPLETED','CANCELLED')")->fetchColumn();
 
-/* ===================== TODAY'S TASKS ===================== */
+
 
 $stmt = $pdo->prepare("
     SELECT t.*, 
@@ -96,7 +96,7 @@ foreach ($today_tasks as $tt) {
     elseif ($tt['status'] === 'COMPLETED')   $today_completed++;
 }
 
-/* ===================== OVERDUE TASKS ===================== */
+
 
 $overdue_tasks = $pdo->query("
     SELECT t.*, 
@@ -112,7 +112,7 @@ $overdue_tasks = $pdo->query("
     LIMIT 10
 ")->fetchAll();
 
-/* ===================== RECENT TASKS ===================== */
+
 
 $recent = $pdo->query("
     SELECT t.*, 
@@ -126,7 +126,6 @@ $recent = $pdo->query("
     LIMIT 8
 ")->fetchAll();
 
-/* ===================== RECENT AGENTS ===================== */
 
 $agents = $pdo->query("
     SELECT u.*, 

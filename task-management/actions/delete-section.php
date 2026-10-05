@@ -16,7 +16,7 @@ if ($id <= 0) {
 
 $pdo = getDB();
 
-// Check usage
+
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE section_id = ?");
 $stmt->execute([$id]);
 $tasks = $stmt->fetchColumn();

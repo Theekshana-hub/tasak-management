@@ -8,7 +8,7 @@ if (!isset($_SESSION['user_id'])) {
     redirect('../login.php');
 }
 
-// Admin or Super Admin
+
 $role = $_SESSION['user_role'] ?? '';
 if (!in_array($role, ['admin', 'super_admin'], true)) {
     setFlash('danger', 'Access denied.');

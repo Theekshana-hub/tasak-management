@@ -25,7 +25,7 @@ if (!$user) {
     redirect('users.php');
 }
 
-// Prevent editing other super_admins
+
 if ($user['role'] === 'super_admin' && $user['id'] != $_SESSION['user_id']) {
     setFlash('danger', 'You cannot edit another Super Admin.');
     redirect('users.php');

@@ -7,7 +7,7 @@ require_once '../includes/sidebar.php';
 $pdo = getDB();
 $coord_id = (int)$_SESSION['user_id'];
 
-// Current coordinator details
+
 $stmt = $pdo->prepare("SELECT id, name, section_id FROM users WHERE id = ? AND role = 'coordinator' AND status = 'active' LIMIT 1");
 $stmt->execute([$coord_id]);
 $currentCoord = $stmt->fetch();
@@ -17,8 +17,7 @@ if ($currentCoord && $currentCoord['section_id'] !== null) {
     $coord_section_id = (int)$currentCoord['section_id'];
 }
 
-// ===== Agents in SAME SECTION (department) =====
-// Dashboard එකේ වගේ - වෙන coordinator කෙනෙක් add කළ agents ත් පෙන්වයි
+
 $agents = [];
 if ($coord_section_id) {
     $stmt = $pdo->prepare("
@@ -33,7 +32,6 @@ if ($coord_section_id) {
     $agents = $stmt->fetchAll();
 }
 
-// Assignees list = Coordinator (self) + All agents in same section
 $assignees = [];
 if ($currentCoord) {
     $assignees[] = [
@@ -52,7 +50,7 @@ foreach ($agents as $a) {
     ];
 }
 
-// ===== ONLY Coordinator's own section =====
+
 $sections = [];
 if ($coord_section_id) {
     $st = $pdo->prepare("SELECT id, name FROM sections WHERE status = 'active' AND id = ? ORDER BY name");
@@ -133,7 +131,7 @@ if ($coord_section_id) {
         <form method="POST" action="../actions/create-task-coord.php" enctype="multipart/form-data" id="taskForm">
             <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
 
-            <!-- Section + Assign Type + Assignees -->
+           
             <div class="row g-3 mb-4">
                 <div class="col-md-4">
                     <label class="form-label">Section <span class="text-danger">*</span></label>
@@ -152,7 +150,7 @@ if ($coord_section_id) {
                     <small class="text-muted">Your assigned section only</small>
                 </div>
 
-                <!-- Assign Type: multi-select checkbox dropdown -->
+                
                 <div class="col-md-4">
                     <label class="form-label">Assign Type</label>
                     <div class="dropdown">
@@ -306,7 +304,7 @@ const assigneeItems   = assigneeBox ? Array.from(assigneeBox.querySelectorAll('.
 
 let taskIndex = 0;
 
-// Does this person belong to the chosen section?
+
 function inSection(item, sectionId) {
     if (!sectionId) return false;
     const itemSection = parseInt(item.getAttribute('data-section') || '0');
@@ -315,7 +313,7 @@ function inSection(item, sectionId) {
     return itemSection === sectionId;
 }
 
-// ---------- Assign Type (multi-select dropdown) ----------
+
 function getSelectedRoles() {
     return roleChecks.filter(c => c.checked).map(c => c.value);
 }
@@ -351,7 +349,7 @@ if (roleAll) {
     });
 }
 
-// ---------- Assignee filtering ----------
+
 function filterAssignees() {
     const sectionId = sectionSelect.value ? parseInt(sectionSelect.value) : 0;
     const roles     = getSelectedRoles();
@@ -445,12 +443,12 @@ updateRoleButtonText();
 filterAssignees();
 updateSelectedCount();
 
-// Auto-trigger filter if section is already selected (only 1 section)
+
 if (sectionSelect && sectionSelect.value) {
     sectionSelect.dispatchEvent(new Event('change'));
 }
 
-// ---------- Due date calculation ----------
+
 function calcDueDate(block) {
     const startInput = block.querySelector('.start-date');
     const daysSelect = block.querySelector('.duration-days');

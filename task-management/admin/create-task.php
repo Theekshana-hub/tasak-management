@@ -8,7 +8,6 @@ $pdo = getDB();
 
 $sections = $pdo->query("SELECT id, name FROM sections WHERE status = 'active' ORDER BY name")->fetchAll();
 
-// Admin can assign only to: Management(admin), Coordinator, Agent — NOT Managing Director
 $assignees = $pdo->query("
     SELECT id, name, role, section_id 
     FROM users 
@@ -100,7 +99,7 @@ function roleLabel($role) {
                     <small class="text-muted">Used only to filter assignees if needed.</small>
                 </div>
 
-                <!-- Assign Type: multi-select checkbox dropdown -->
+              
                 <div class="col-md-4">
                     <label class="form-label">Assign Type</label>
                     <div class="dropdown">
@@ -168,7 +167,7 @@ function roleLabel($role) {
 
             <hr>
 
-            <!-- Multiple Tasks -->
+        
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="mb-0"><i class="bi bi-list-task"></i> Tasks</h5>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="addTaskBtn">
@@ -278,11 +277,11 @@ function updateRoleButtonText() {
 }
 
 roleAll.addEventListener('change', function () {
-    // "All" ticked -> clear the individual roles
+  
     if (roleAll.checked) {
         roleChecks.forEach(c => c.checked = false);
     } else if (getSelectedRoles().length === 0) {
-        // Can't leave nothing ticked; keep "All"
+      
         roleAll.checked = true;
     }
     updateRoleButtonText();

@@ -26,7 +26,7 @@ if ($id <= 0) {
     redirect('../admin/users.php');
 }
 
-// Cannot delete yourself
+
 if ($id === (int)$_SESSION['user_id']) {
     setFlash('danger', 'You cannot delete your own account.');
     redirect('../admin/users.php');
@@ -43,31 +43,24 @@ if (!$user) {
     redirect('../admin/users.php');
 }
 
-// Admin cannot delete Super Admin
+
 if ($user['role'] === 'super_admin') {
     setFlash('danger', 'You cannot delete a Super Admin account.');
     redirect('../admin/users.php');
 }
 
-// Optional: Admin cannot delete another Admin
-// if ($user['role'] === 'admin') {
-//     setFlash('danger', 'You cannot delete another Admin.');
-//     redirect('../admin/users.php');
-// }
-
-// Check related tasks
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE assigned_to = ? OR created_by = ?");
 $stmt->execute([$id, $id]);
 $taskCount = (int)$stmt->fetchColumn();
 
 try {
     if ($taskCount > 0) {
-        // Soft delete
+       
         $stmt = $pdo->prepare("UPDATE users SET status = 'inactive' WHERE id = ?");
         $stmt->execute([$id]);
         setFlash('warning', 'User has existing tasks. Account has been deactivated instead of deleted.');
     } else {
-        // Hard delete
+       
         $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
         $stmt->execute([$id]);
         setFlash('success', 'User "' . e($user['name']) . '" deleted successfully.');

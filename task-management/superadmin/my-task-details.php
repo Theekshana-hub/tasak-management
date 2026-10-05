@@ -6,7 +6,7 @@ $pdo     = getDB();
 $user_id = (int)$_SESSION['user_id'];
 $id      = (int)($_GET['id'] ?? $_POST['task_id'] ?? 0);
 
-// ---------- Handle Start / Complete on THIS page ----------
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id > 0) {
 
     if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
@@ -27,7 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id > 0) {
 
     $user_name = $_SESSION['user_name'] ?? 'User';
 
-    // START → IN_PROGRESS
     if ($new_status === 'IN_PROGRESS' && $taskRow['status'] === 'PENDING') {
         $stmt = $pdo->prepare("UPDATE tasks SET status = 'IN_PROGRESS', updated_at = NOW() WHERE id = ? AND assigned_to = ?");
         $stmt->execute([$id, $user_id]);

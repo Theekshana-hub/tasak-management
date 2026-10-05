@@ -23,7 +23,6 @@ if (!$task) {
     redirect('my-tasks.php');
 }
 
-// Comments
 $comments = $pdo->prepare("
     SELECT tc.*, u.name AS user_name, u.role 
     FROM task_comments tc

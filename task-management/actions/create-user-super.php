@@ -3,10 +3,9 @@ session_start();
 require_once '../config/database.php';
 require_once '../includes/functions.php';
 
-// Set to true ONLY while debugging to see the real error on screen
 $debug = false;
 
-// Only Super Admin
+
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'super_admin') {
     setFlash('danger', 'Access denied.');
     redirect('../login.php');
@@ -31,7 +30,7 @@ $status     = $_POST['status'] ?? 'active';
 $password   = $_POST['password'] ?? '';
 $confirm    = $_POST['confirm_password'] ?? '';
 
-// Keep old input so the form can be re-filled on error (password never stored)
+
 $_SESSION['old_input'] = [
     'name'       => $name,
     'email'      => $email,
@@ -78,7 +77,7 @@ if ($password !== $confirm) {
 $pdo = getDB();
 
 try {
-    // Detect which columns really exist in the users table
+   
     $cols = $pdo->query("SHOW COLUMNS FROM users")->fetchAll(PDO::FETCH_COLUMN);
 
     $passCol = null;
@@ -92,7 +91,7 @@ try {
         throw new Exception('No password column found in users table.');
     }
 
-    // Email must be unique
+
     $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
     $stmt->execute([$email]);
     if ($stmt->fetch()) {
@@ -100,7 +99,7 @@ try {
         redirect('../superadmin/add-user.php');
     }
 
-    // Section must exist (if selected)
+
     if ($section_id !== null) {
         $stmt = $pdo->prepare("SELECT id FROM sections WHERE id = ? LIMIT 1");
         $stmt->execute([$section_id]);
@@ -110,7 +109,7 @@ try {
         }
     }
 
-    // Build INSERT dynamically based on existing columns
+
     $data = [
         'name'       => $name,
         'email'      => $email,

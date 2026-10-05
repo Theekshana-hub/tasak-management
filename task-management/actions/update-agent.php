@@ -5,13 +5,12 @@ require_once '../includes/functions.php';
 
 $role = $_SESSION['user_role'] ?? '';
 
-// Only coordinators can edit agents
 if (!isset($_SESSION['user_id']) || $role !== 'coordinator') {
     setFlash('danger', 'Access denied.');
     redirect('../login.php');
 }
 
-// NOTE: coordinator folder name eka oyage project ekata maru karanna
+
 $back_agents = '../coordinator/agents.php';
 $back_edit   = '../coordinator/edit-agent.php?id=';
 
@@ -30,7 +29,7 @@ if ($agent_id <= 0) {
 $coord_id = (int)$_SESSION['user_id'];
 $pdo      = getDB();
 
-// Coordinator ගේ section එක
+
 $stmt = $pdo->prepare("
     SELECT section_id 
     FROM users 
@@ -46,7 +45,7 @@ if ($coord_section_id <= 0) {
     redirect($back_agents);
 }
 
-// Agent එක same section එකේ role = 'user' කෙනෙක්ද?
+
 $stmt = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'user' AND section_id = ? LIMIT 1");
 $stmt->execute([$agent_id, $coord_section_id]);
 if (!$stmt->fetch()) {
@@ -54,7 +53,6 @@ if (!$stmt->fetch()) {
     redirect($back_agents);
 }
 
-// ---------- Input validation ----------
 $name     = trim($_POST['name'] ?? '');
 $email    = trim($_POST['email'] ?? '');
 $phone    = trim($_POST['phone'] ?? '');
@@ -85,7 +83,7 @@ if ($password !== '' && strlen($password) < 6) {
     redirect($back_edit . $agent_id);
 }
 
-// Email එක වෙන කෙනෙක් use කරනවද?
+
 $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1");
 $stmt->execute([$email, $agent_id]);
 if ($stmt->fetch()) {
@@ -93,13 +91,12 @@ if ($stmt->fetch()) {
     redirect($back_edit . $agent_id);
 }
 
-// ---------- Update ----------
+
 try {
     $sql    = "UPDATE users SET name = ?, email = ?, phone = ?, status = ?";
     $params = [$name, $email, ($phone !== '' ? $phone : null), $status];
 
-    // Password දුන්නොත් විතරක් update කරනවා
-    // NOTE: oyage users table eke password column eka 'password' nemei nam maru karanna
+   
     if ($password !== '') {
         $sql     .= ", password = ?";
         $params[] = password_hash($password, PASSWORD_DEFAULT);

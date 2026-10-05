@@ -97,10 +97,10 @@ foreach ($all_tasks as $t) {
 
 $sections = $pdo->query("SELECT id, name FROM sections WHERE status='active' ORDER BY name")->fetchAll();
 
-// Agents + section_id (JS filter එකට)
+
 $users = $pdo->query("SELECT id, name, section_id FROM users WHERE role='user' AND status='active' ORDER BY name")->fetchAll();
 
-// Admins + Coordinators, coordinator ට යටතේ තියෙන section ids
+
 $assigners_raw = $pdo->query("SELECT id, name, role FROM users WHERE role IN ('admin','coordinator') AND status='active' ORDER BY role, name")->fetchAll();
 $assigners = [];
 foreach ($assigners_raw as $a) {
@@ -110,7 +110,7 @@ foreach ($assigners_raw as $a) {
         $st->execute([$a['id']]);
         $section_ids = array_map('intval', array_column($st->fetchAll(), 'section_id'));
     }
-    // admin → හැම section එකටම (empty = all)
+  
     $assigners[] = [
         'id'          => (int)$a['id'],
         'name'        => $a['name'],
@@ -202,7 +202,6 @@ $today = date('Y-m-d');
 </div>
 <?php endif; ?>
 
-<!-- Day Group Cards -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-2">
         <a href="<?php echo e(dayGroupUrlAdmin('', $search, $section, $user, $assigned_by, $status, $priority)); ?>" class="text-decoration-none">
@@ -445,11 +444,11 @@ $today = date('Y-m-d');
     const agentFilter      = document.getElementById('agentFilter');
 
     function filterDropdowns() {
-        const sectionId = sectionFilter.value; // '' = all
+        const sectionId = sectionFilter.value; 
 
-        // --- Agents: ඒ section එකේ agents විතරක් ---
+       
         Array.from(agentFilter.options).forEach(function (opt, idx) {
-            if (idx === 0) { // "All Agents"
+            if (idx === 0) {
                 opt.hidden = false;
                 return;
             }
@@ -460,12 +459,11 @@ $today = date('Y-m-d');
                 opt.hidden = (agentSection !== sectionId && agentSection !== '0');
             }
         });
-        // selected agent hidden නම් reset
+       
         if (agentFilter.selectedOptions.length && agentFilter.selectedOptions[0].hidden) {
             agentFilter.value = '';
         }
 
-        // --- Assigned By: Admin හැමදාම + Coordinator ඒ section manage කරනවා නම් ---
         Array.from(assignedByFilter.options).forEach(function (opt, idx) {
             if (idx === 0) {
                 opt.hidden = false;
@@ -480,10 +478,10 @@ $today = date('Y-m-d');
                 return;
             }
             if (role === 'admin') {
-                opt.hidden = false; // Admin always visible
+                opt.hidden = false; 
                 return;
             }
-            // Coordinator: ඒ section එක යටතේ agents තියෙනවා නම් පෙන්නන්න
+        
             opt.hidden = sections.indexOf(sectionId) === -1;
         });
         if (assignedByFilter.selectedOptions.length && assignedByFilter.selectedOptions[0].hidden) {
@@ -492,7 +490,7 @@ $today = date('Y-m-d');
     }
 
     sectionFilter.addEventListener('change', filterDropdowns);
-    // page load (GET section තියෙනවා නම්)
+    
     filterDropdowns();
 })();
 </script>

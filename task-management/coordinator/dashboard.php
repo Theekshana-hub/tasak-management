@@ -19,27 +19,20 @@ function parseDayLabelDash($title) {
     return null;
 }
 
-// ----- Coordinator's own section (department) -----
+
 $stmt = $pdo->prepare("SELECT section_id FROM users WHERE id = ? AND role = 'coordinator' LIMIT 1");
 $stmt->execute([$coord_id]);
 $coord_section_id = $stmt->fetchColumn();
 $coord_section_id = $coord_section_id !== false && $coord_section_id !== null ? (int)$coord_section_id : null;
 
-/*
- * Department scope:
- * - Tasks assigned to ME
- * - OR tasks assigned to any AGENT (role=user) in MY section
- * This includes agents added by OTHER coordinators in the same department.
- */
+
 function deptTaskWhere($aliasT = 't', $aliasU = 'u') {
-    // Returns SQL fragment + needs params: [coord_id, section_id] when section exists
-    // or just [coord_id] when no section
-    return true; // placeholder – we build inline below
+ 
+    return true; 
 }
 
-// ----- Overall stats -----
 if ($coord_section_id) {
-    // Agents in same department
+
     $stmt = $pdo->prepare("
         SELECT COUNT(*) FROM users 
         WHERE role = 'user' AND status = 'active' AND section_id = ?
@@ -107,7 +100,7 @@ if ($coord_section_id) {
     $stmt->execute([$coord_id, $coord_id, $coord_section_id, $today, $today]);
     $today_tasks = $stmt->fetchAll();
 
-    // Section stats (today)
+
     $stmt = $pdo->prepare("
         SELECT
             s.id,
@@ -145,7 +138,7 @@ if ($coord_section_id) {
     $stmt->execute([$coord_id, $coord_id, $coord_section_id]);
     $recent = $stmt->fetchAll();
 
-    // Agents in same department (including other coordinators' agents)
+
     $stmt = $pdo->prepare("
         SELECT u.*, 
                (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id AND t.status IN ('PENDING','IN_PROGRESS')) AS active_tasks
@@ -157,7 +150,7 @@ if ($coord_section_id) {
     $agents = $stmt->fetchAll();
 
 } else {
-    // No section → only own tasks / no department agents
+
     $total_agents = 0;
     $total_tasks = $pending = $in_progress = $completed = $overdue = 0;
     $today_tasks = [];
@@ -291,7 +284,7 @@ foreach ($today_tasks as $tt) {
     </div>
 </div>
 
-<!-- ========== TODAY'S DAILY TASKS ========== -->
+
 <div class="card border-0 shadow-sm mb-4 border-start border-4 border-warning">
     <div class="card-header bg-warning bg-opacity-10 d-flex flex-wrap justify-content-between align-items-center gap-2">
         <span class="fw-semibold">
@@ -395,7 +388,7 @@ foreach ($today_tasks as $tt) {
     </div>
 </div>
 
-<!-- ========== SECTION-WISE TASK BREAKDOWN ========== -->
+
 <div class="card border-0 shadow-sm mb-4 border-start border-4 border-info">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <span class="fw-semibold">

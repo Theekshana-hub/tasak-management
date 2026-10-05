@@ -5,7 +5,7 @@ require_once '../includes/functions.php';
 
 $currentRole = $_SESSION['user_role'] ?? '';
 
-// Only Super Admin or Admin can access
+
 if (!isset($_SESSION['user_id']) || !in_array($currentRole, ['super_admin', 'admin'])) {
     setFlash('danger', 'Access denied.');
     redirect('../login.php');
@@ -138,4 +138,4 @@ if (!empty($password) || !empty($confirm)) {
 }
 
 setFlash('success', 'User updated successfully.');
-goBack(); // goes to correct users.php
+goBack(); 

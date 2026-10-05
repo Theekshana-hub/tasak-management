@@ -3,7 +3,7 @@ session_start();
 require_once '../config/database.php';
 require_once '../includes/functions.php';
 
-// Only Super Admin
+
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'super_admin') {
     setFlash('danger', 'Access denied.');
     redirect('../login.php');
@@ -16,7 +16,7 @@ require_once '../includes/sidebar.php';
 $pdo = getDB();
 $sections = $pdo->query("SELECT id, name FROM sections WHERE status = 'active' ORDER BY name ASC")->fetchAll();
 
-// Re-fill form if validation failed
+
 $old = $_SESSION['old_input'] ?? [];
 unset($_SESSION['old_input']);
 ?>

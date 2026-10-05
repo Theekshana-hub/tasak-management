@@ -26,7 +26,7 @@ if ($id <= 0) {
 
 $pdo = getDB();
 
-// Own task only — overdue block නැහැ
+
 $stmt = $pdo->prepare("SELECT id FROM tasks WHERE id = ? AND assigned_to = ? LIMIT 1");
 $stmt->execute([$id, $user_id]);
 if (!$stmt->fetch()) {

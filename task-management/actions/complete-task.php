@@ -1,5 +1,5 @@
 <?php
-require_once '../includes/auth.php';   // any logged-in user
+require_once '../includes/auth.php';  
 require_once '../includes/functions.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -27,7 +27,7 @@ $pdo = getDB();
 $pdo->beginTransaction();
 
 try {
-    // Check this user is actually assigned
+    
     $check = $pdo->prepare("
         SELECT id, status FROM task_assignees 
         WHERE task_id = ? AND user_id = ?

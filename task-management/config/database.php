@@ -1,18 +1,12 @@
 <?php
-/**
- * Database Configuration - Sipway Campus Task Management
- * Change these values according to your WAMP/XAMPP settings
- */
+
 
 define('DB_HOST', '');
 define('DB_NAME', '');
 define('DB_USER', '');
-define('DB_PASS', ''); // Empty for default WAMP/XAMPP
+define('DB_PASS', ''); 
 define('DB_CHARSET', '');
 
-/**
- * Create PDO connection
- */
 function getDB() {
     static $pdo = null;
     
@@ -26,7 +20,7 @@ function getDB() {
             ];
             $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
         } catch (PDOException $e) {
-            // In production, log the error instead of showing it
+           
             die("Database connection failed: " . $e->getMessage());
         }
     }

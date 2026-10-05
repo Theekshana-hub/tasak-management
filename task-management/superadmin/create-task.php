@@ -8,7 +8,7 @@ $pdo = getDB();
 
 $sections = $pdo->query("SELECT id, name FROM sections WHERE status = 'active' ORDER BY name")->fetchAll();
 
-// Super Admin can assign to: Managing Director, Management, Coordinator, Agent
+
 $assignees = $pdo->query("
     SELECT id, name, role, section_id 
     FROM users 
@@ -117,7 +117,7 @@ if (isset($_SESSION['flash'])) {
                     <small class="text-muted">Optional. Used only to filter assignees if needed.</small>
                 </div>
 
-                <!-- Assign Type: multi-select checkbox dropdown -->
+              
                 <div class="col-md-4">
                     <label class="form-label">Assign Type</label>
                     <div class="dropdown">

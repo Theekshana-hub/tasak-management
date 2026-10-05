@@ -10,7 +10,7 @@ $search      = trim($_GET['search'] ?? '');
 $section     = $_GET['section'] ?? '';
 $user        = $_GET['user'] ?? '';
 $assigned_by = $_GET['assigned_by'] ?? '';
-$status      = strtoupper($_GET['status'] ?? '');   // dashboard link (status=overdue) also works now
+$status      = strtoupper($_GET['status'] ?? '');  
 $priority    = $_GET['priority'] ?? '';
 $day_group   = $_GET['day_group'] ?? '';
 
@@ -28,11 +28,7 @@ function parseDayLabel($title) {
     return null;
 }
 
-/*
- * FIX: INNER JOIN -> LEFT JOIN
- * Super admin create karapu tasks walata section_id / assigned_to NULL wenna puluwan,
- * INNER JOIN eken ewa hide wenawa. LEFT JOIN dammama okkoma penawa.
- */
+
 $sql = "SELECT t.*,
                COALESCE(u.name, '—')  AS assigned_name,
                COALESCE(s.name, '—')  AS section_name,
@@ -64,7 +60,7 @@ if ($assigned_by !== '') {
     $params[] = (int)$assigned_by;
 }
 
-// ===== Status Filter (including Overdue) =====
+
 if ($status === 'OVERDUE') {
     $sql .= " AND t.due_date < ? AND t.status NOT IN ('COMPLETED', 'CANCELLED')";
     $params[] = $today;

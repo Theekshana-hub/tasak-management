@@ -8,7 +8,7 @@ $pdo = getDB();
 
 $search = trim($_GET['search'] ?? '');
 
-// Show both admin and super_admin
+
 $sql = "SELECT u.* FROM users u WHERE u.role IN ('admin', 'super_admin')";
 $params = [];
 
@@ -17,7 +17,7 @@ if ($search !== '') {
     $like = "%$search%";
     $params = [$like, $like, $like];
 }
-$sql .= " ORDER BY u.role DESC, u.created_at DESC";  // Super Admins first
+$sql .= " ORDER BY u.role DESC, u.created_at DESC"; 
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);

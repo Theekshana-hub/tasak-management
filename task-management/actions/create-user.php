@@ -3,7 +3,6 @@ session_start();
 require_once '../config/database.php';
 require_once '../includes/functions.php';
 
-// Only admin
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'admin') {
     setFlash('danger', 'Access denied.');
     redirect('../login.php');
@@ -43,7 +42,7 @@ if (!in_array($role, ['admin', 'coordinator', 'user'])) {
 
 $pdo = getDB();
 
-// Check email unique
+
 $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
 $stmt->execute([$email]);
 if ($stmt->fetch()) {

@@ -8,7 +8,7 @@ $pdo      = getDB();
 $coord_id = (int)$_SESSION['user_id'];
 $agent_id = (int)($_GET['id'] ?? 0);
 
-// Coordinator ගේ section එක
+
 $stmt = $pdo->prepare("
     SELECT section_id 
     FROM users 
@@ -19,7 +19,7 @@ $stmt->execute([$coord_id]);
 $coord = $stmt->fetch();
 $coord_section_id = (int)($coord['section_id'] ?? 0);
 
-// Agent එක same section එකේ role = 'user' කෙනෙක්ද කියලා check කරනවා
+
 $agent = null;
 if ($agent_id > 0 && $coord_section_id > 0) {
     $stmt = $pdo->prepare("
@@ -33,7 +33,6 @@ if ($agent_id > 0 && $coord_section_id > 0) {
     $agent = $stmt->fetch();
 }
 
-// Redirect BEFORE any HTML output
 if (!$agent) {
     setFlash('danger', 'Agent not found in your department.');
     redirect('agents.php');

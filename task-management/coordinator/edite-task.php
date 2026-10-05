@@ -13,7 +13,7 @@ if ($id <= 0) {
     redirect('tasks.php');
 }
 
-// Coordinator section
+
 $stmt = $pdo->prepare("SELECT section_id FROM users WHERE id = ? AND role = 'coordinator' LIMIT 1");
 $stmt->execute([$coord_id]);
 $coord_section_id = $stmt->fetchColumn();
@@ -24,7 +24,7 @@ if (!$coord_section_id) {
     redirect('tasks.php');
 }
 
-// Load task only if in department
+
 $stmt = $pdo->prepare("
     SELECT t.*
     FROM tasks t

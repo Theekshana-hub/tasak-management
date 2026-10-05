@@ -3,7 +3,7 @@ session_start();
 require_once '../config/database.php';
 require_once '../includes/functions.php';
 
-// Auth check
+
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'super_admin') {
     header('Location: ../login.php');
     exit;
@@ -13,11 +13,11 @@ $pdo = getDB();
 $message = '';
 $error = '';
 
-// ===== Handle Form Actions =====
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    // ---- Add Section ----
+   
     if ($action === 'add') {
         $name = trim($_POST['name'] ?? '');
         $description = trim($_POST['description'] ?? '');
@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // ---- Edit Section ----
+    
     if ($action === 'edit') {
         $id = (int)($_POST['id'] ?? 0);
         $name = trim($_POST['name'] ?? '');
@@ -46,11 +46,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // ---- Delete Section ----
+
     if ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
-            // Optional: Check if section has tasks before deleting
+            
             $check = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE section_id = ?");
             $check->execute([$id]);
             $taskCount = $check->fetchColumn();
@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch all sections
+
 $stmt = $pdo->query("SELECT * FROM sections ORDER BY id DESC");
 $sections = $stmt->fetchAll();
 
@@ -96,7 +96,7 @@ require_once '../includes/sidebar.php';
     </div>
 <?php endif; ?>
 
-<!-- ===== Sections Table ===== -->
+
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -209,7 +209,6 @@ require_once '../includes/sidebar.php';
     </div>
 </div>
 
-<!-- ===== Delete Modal ===== -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
     <div class="modal-dialog">
         <form method="POST" class="modal-content">
@@ -232,7 +231,7 @@ require_once '../includes/sidebar.php';
 </div>
 
 <script>
-// Fill Edit Modal
+
 document.getElementById('editModal').addEventListener('show.bs.modal', function (event) {
     const button = event.relatedTarget;
     document.getElementById('edit-id').value = button.getAttribute('data-id');
