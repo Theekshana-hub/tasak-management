@@ -19,9 +19,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 });
-// Super Admin Dashboard - light interactions
+
 document.addEventListener('DOMContentLoaded', function () {
-    // Soft fade-in for stat cards
+
     const cards = document.querySelectorAll('.stat-card, .row.g-3 > .col-md-4 > a.card');
     cards.forEach((card, index) => {
         card.style.opacity = '0';

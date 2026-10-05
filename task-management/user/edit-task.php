@@ -13,7 +13,6 @@ if ($id <= 0) {
     redirect('my-tasks.php');
 }
 
-// Only own tasks
 $stmt = $pdo->prepare("SELECT * FROM tasks WHERE id = ? AND assigned_to = ? LIMIT 1");
 $stmt->execute([$id, $user_id]);
 $task = $stmt->fetch();

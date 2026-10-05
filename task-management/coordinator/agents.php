@@ -7,7 +7,7 @@ require_once '../includes/sidebar.php';
 $pdo = getDB();
 $coord_id = (int)$_SESSION['user_id'];
 
-// Coordinator ගේ section (department) එක ගන්නවා
+
 $stmt = $pdo->prepare("
     SELECT section_id 
     FROM users 
@@ -18,7 +18,7 @@ $stmt->execute([$coord_id]);
 $coord = $stmt->fetch();
 $coord_section_id = $coord['section_id'] ?? null;
 
-// ===== Same department එකේ ඉන්න ALL agents (ඕනෑම coordinator කෙනෙක් add කළත්) =====
+
 $agents = [];
 
 if (!empty($coord_section_id)) {
