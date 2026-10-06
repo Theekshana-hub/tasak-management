@@ -19,93 +19,128 @@ function parseDayLabelDash($title) {
     return null;
 }
 
-
+// ----- Own section -----
 $stmt = $pdo->prepare("SELECT section_id FROM users WHERE id = ? AND role = 'coordinator' LIMIT 1");
 $stmt->execute([$coord_id]);
 $coord_section_id = $stmt->fetchColumn();
-$coord_section_id = $coord_section_id !== false && $coord_section_id !== null ? (int)$coord_section_id : null;
+$coord_section_id = ($coord_section_id !== false && $coord_section_id !== null) ? (int)$coord_section_id : null;
 
-
-function deptTaskWhere($aliasT = 't', $aliasU = 'u') {
- 
-    return true; 
+// ----- Allowed sections = own + Super Admin granted -----
+$allowed_section_ids = [];
+if ($coord_section_id) {
+    $allowed_section_ids[] = $coord_section_id;
+}
+$acc = $pdo->prepare("SELECT section_id FROM coordinator_section_access WHERE coordinator_id = ?");
+$acc->execute([$coord_id]);
+foreach ($acc->fetchAll(PDO::FETCH_COLUMN) as $sid) {
+    $sid = (int)$sid;
+    if ($sid > 0 && !in_array($sid, $allowed_section_ids, true)) {
+        $allowed_section_ids[] = $sid;
+    }
 }
 
-if ($coord_section_id) {
+$total_agents = 0;
+$total_tasks = $pending = $in_progress = $completed = $overdue = 0;
+$today_tasks = [];
+$section_stats = [];
+$recent = [];
+$agents = [];
 
+if (!empty($allowed_section_ids)) {
+    $ph = implode(',', array_fill(0, count($allowed_section_ids), '?'));
+
+    // Agents in allowed departments
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM users 
-        WHERE role = 'user' AND status = 'active' AND section_id = ?
+        SELECT COUNT(*) FROM users
+        WHERE role = 'user' AND status = 'active' AND section_id IN ($ph)
     ");
-    $stmt->execute([$coord_section_id]);
-    $total_agents = $stmt->fetchColumn();
+    $stmt->execute($allowed_section_ids);
+    $total_agents = (int)$stmt->fetchColumn();
 
+    /*
+     * Scope WHERE fragment:
+     *   t.assigned_to = ?                    → 1 param (coord_id)
+     *   OR u.section_id IN (...)             → N params
+     *   OR t.section_id IN (...)             → N params
+     * Total = 1 + 2N
+     */
+    $scopeSql = "(
+        t.assigned_to = ?
+        OR (u.role = 'user' AND u.section_id IN ($ph))
+        OR t.section_id IN ($ph)
+    )";
+    $scopeParams = array_merge([$coord_id], $allowed_section_ids, $allowed_section_ids);
+
+    // ----- Counts -----
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM tasks t
+        SELECT COUNT(DISTINCT t.id) FROM tasks t
         JOIN users u ON u.id = t.assigned_to
-        WHERE t.assigned_to = ?
-           OR (u.role = 'user' AND u.section_id = ?)
+        WHERE $scopeSql
     ");
-    $stmt->execute([$coord_id, $coord_section_id]);
-    $total_tasks = $stmt->fetchColumn();
+    $stmt->execute($scopeParams);
+    $total_tasks = (int)$stmt->fetchColumn();
 
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM tasks t
+        SELECT COUNT(DISTINCT t.id) FROM tasks t
         JOIN users u ON u.id = t.assigned_to
-        WHERE (t.assigned_to = ? OR (u.role = 'user' AND u.section_id = ?))
-          AND t.status = 'PENDING'
+        WHERE $scopeSql AND t.status = 'PENDING'
     ");
-    $stmt->execute([$coord_id, $coord_section_id]);
-    $pending = $stmt->fetchColumn();
+    $stmt->execute($scopeParams);
+    $pending = (int)$stmt->fetchColumn();
 
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM tasks t
+        SELECT COUNT(DISTINCT t.id) FROM tasks t
         JOIN users u ON u.id = t.assigned_to
-        WHERE (t.assigned_to = ? OR (u.role = 'user' AND u.section_id = ?))
-          AND t.status = 'IN_PROGRESS'
+        WHERE $scopeSql AND t.status = 'IN_PROGRESS'
     ");
-    $stmt->execute([$coord_id, $coord_section_id]);
-    $in_progress = $stmt->fetchColumn();
+    $stmt->execute($scopeParams);
+    $in_progress = (int)$stmt->fetchColumn();
 
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM tasks t
+        SELECT COUNT(DISTINCT t.id) FROM tasks t
         JOIN users u ON u.id = t.assigned_to
-        WHERE (t.assigned_to = ? OR (u.role = 'user' AND u.section_id = ?))
-          AND t.status = 'COMPLETED'
+        WHERE $scopeSql AND t.status = 'COMPLETED'
     ");
-    $stmt->execute([$coord_id, $coord_section_id]);
-    $completed = $stmt->fetchColumn();
+    $stmt->execute($scopeParams);
+    $completed = (int)$stmt->fetchColumn();
 
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM tasks t
+        SELECT COUNT(DISTINCT t.id) FROM tasks t
         JOIN users u ON u.id = t.assigned_to
-        WHERE (t.assigned_to = ? OR (u.role = 'user' AND u.section_id = ?))
+        WHERE $scopeSql
           AND t.due_date < CURDATE()
           AND t.status NOT IN ('COMPLETED','CANCELLED')
     ");
-    $stmt->execute([$coord_id, $coord_section_id]);
-    $overdue = $stmt->fetchColumn();
+    $stmt->execute($scopeParams);
+    $overdue = (int)$stmt->fetchColumn();
 
-    // Today tasks
+    // ----- Today tasks -----
+    // Placeholders order:
+    //   1) is_mine CASE  → coord_id
+    //   2) scopeSql      → scopeParams
+    //   3) due_date      → today
+    //   4) start_date    → today
     $stmt = $pdo->prepare("
         SELECT t.*, u.name AS assigned_name, s.name AS section_name,
-               CASE WHEN t.assigned_to = ? THEN 1 ELSE 0 END AS is_mine
+               CASE WHEN t.assigned_to = ? THEN 1 ELSE 0 END AS is_mine,
+               CASE WHEN DATE(t.created_at) = CURDATE() THEN 1 ELSE 0 END AS added_today
         FROM tasks t
         JOIN users u ON u.id = t.assigned_to
         LEFT JOIN sections s ON s.id = t.section_id
-        WHERE (t.assigned_to = ? OR (u.role = 'user' AND u.section_id = ?))
+        WHERE $scopeSql
           AND (t.due_date = ? OR t.start_date = ?)
-        ORDER BY is_mine DESC, t.status ASC, u.name ASC
+        ORDER BY added_today DESC, is_mine DESC, t.created_at DESC, t.status ASC, u.name ASC
     ");
-    $stmt->execute([$coord_id, $coord_id, $coord_section_id, $today, $today]);
+    $stmt->execute(array_merge([$coord_id], $scopeParams, [$today, $today]));
     $today_tasks = $stmt->fetchAll();
 
-
+    // ----- Section-wise breakdown (today) -----
+    // Placeholders: s.id IN (N) + coord_id + u.section IN (N) + t.section IN (N)
     $stmt = $pdo->prepare("
         SELECT
             s.id,
             s.name AS section_name,
-            COUNT(t.id) AS total_tasks,
+            COUNT(DISTINCT t.id) AS total_tasks,
             SUM(CASE WHEN t.status = 'PENDING' THEN 1 ELSE 0 END) AS pending_count,
             SUM(CASE WHEN t.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS progress_count,
             SUM(CASE WHEN t.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_count,
@@ -116,91 +151,97 @@ if ($coord_section_id) {
            AND (t.due_date = CURDATE() OR t.start_date = CURDATE())
         LEFT JOIN users u ON u.id = t.assigned_to
         WHERE s.status = 'active'
-          AND s.id = ?
-          AND (t.id IS NULL OR t.assigned_to = ? OR (u.role = 'user' AND u.section_id = ?))
+          AND s.id IN ($ph)
+          AND (
+                t.id IS NULL
+             OR t.assigned_to = ?
+             OR (u.role = 'user' AND u.section_id IN ($ph))
+             OR t.section_id IN ($ph)
+          )
         GROUP BY s.id, s.name
         ORDER BY s.name ASC
     ");
-    $stmt->execute([$coord_section_id, $coord_id, $coord_section_id]);
+    $stmt->execute(array_merge(
+        $allowed_section_ids,
+        [$coord_id],
+        $allowed_section_ids,
+        $allowed_section_ids
+    ));
     $section_stats = $stmt->fetchAll();
 
-    // Recent tasks
+    // ----- Recent tasks -----
+    // Placeholders: is_mine CASE + scopeSql
     $stmt = $pdo->prepare("
         SELECT t.*, u.name AS assigned_name, s.name AS section_name,
-               CASE WHEN t.assigned_to = ? THEN 1 ELSE 0 END AS is_mine
+               CASE WHEN t.assigned_to = ? THEN 1 ELSE 0 END AS is_mine,
+               CASE WHEN DATE(t.created_at) = CURDATE() THEN 1 ELSE 0 END AS added_today
         FROM tasks t
         JOIN users u ON u.id = t.assigned_to
         LEFT JOIN sections s ON s.id = t.section_id
-        WHERE t.assigned_to = ? OR (u.role = 'user' AND u.section_id = ?)
-        ORDER BY t.created_at DESC
+        WHERE $scopeSql
+        ORDER BY added_today DESC, t.created_at DESC
         LIMIT 10
     ");
-    $stmt->execute([$coord_id, $coord_id, $coord_section_id]);
+    $stmt->execute(array_merge([$coord_id], $scopeParams));
     $recent = $stmt->fetchAll();
 
-
+    // ----- Agents -----
     $stmt = $pdo->prepare("
-        SELECT u.*, 
+        SELECT u.*,
                (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id AND t.status IN ('PENDING','IN_PROGRESS')) AS active_tasks
         FROM users u
-        WHERE u.role = 'user' AND u.section_id = ?
+        WHERE u.role = 'user' AND u.status = 'active' AND u.section_id IN ($ph)
         ORDER BY u.name ASC
+        LIMIT 20
     ");
-    $stmt->execute([$coord_section_id]);
+    $stmt->execute($allowed_section_ids);
     $agents = $stmt->fetchAll();
 
 } else {
-
-    $total_agents = 0;
-    $total_tasks = $pending = $in_progress = $completed = $overdue = 0;
-    $today_tasks = [];
-    $section_stats = [];
-    $recent = [];
-    $agents = [];
-
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM tasks WHERE assigned_to = ?
-    ");
+    // No section → only own tasks
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE assigned_to = ?");
     $stmt->execute([$coord_id]);
-    $total_tasks = $stmt->fetchColumn();
+    $total_tasks = (int)$stmt->fetchColumn();
 
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE assigned_to = ? AND status = 'PENDING'");
     $stmt->execute([$coord_id]);
-    $pending = $stmt->fetchColumn();
+    $pending = (int)$stmt->fetchColumn();
 
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE assigned_to = ? AND status = 'IN_PROGRESS'");
     $stmt->execute([$coord_id]);
-    $in_progress = $stmt->fetchColumn();
+    $in_progress = (int)$stmt->fetchColumn();
 
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM tasks WHERE assigned_to = ? AND status = 'COMPLETED'");
     $stmt->execute([$coord_id]);
-    $completed = $stmt->fetchColumn();
+    $completed = (int)$stmt->fetchColumn();
 
     $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM tasks 
+        SELECT COUNT(*) FROM tasks
         WHERE assigned_to = ? AND due_date < CURDATE() AND status NOT IN ('COMPLETED','CANCELLED')
     ");
     $stmt->execute([$coord_id]);
-    $overdue = $stmt->fetchColumn();
+    $overdue = (int)$stmt->fetchColumn();
 
     $stmt = $pdo->prepare("
-        SELECT t.*, u.name AS assigned_name, s.name AS section_name, 1 AS is_mine
+        SELECT t.*, u.name AS assigned_name, s.name AS section_name, 1 AS is_mine,
+               CASE WHEN DATE(t.created_at) = CURDATE() THEN 1 ELSE 0 END AS added_today
         FROM tasks t
         JOIN users u ON u.id = t.assigned_to
         LEFT JOIN sections s ON s.id = t.section_id
         WHERE t.assigned_to = ? AND (t.due_date = ? OR t.start_date = ?)
-        ORDER BY t.status ASC
+        ORDER BY added_today DESC, t.created_at DESC, t.status ASC
     ");
     $stmt->execute([$coord_id, $today, $today]);
     $today_tasks = $stmt->fetchAll();
 
     $stmt = $pdo->prepare("
-        SELECT t.*, u.name AS assigned_name, s.name AS section_name, 1 AS is_mine
+        SELECT t.*, u.name AS assigned_name, s.name AS section_name, 1 AS is_mine,
+               CASE WHEN DATE(t.created_at) = CURDATE() THEN 1 ELSE 0 END AS added_today
         FROM tasks t
         JOIN users u ON u.id = t.assigned_to
         LEFT JOIN sections s ON s.id = t.section_id
         WHERE t.assigned_to = ?
-        ORDER BY t.created_at DESC
+        ORDER BY added_today DESC, t.created_at DESC
         LIMIT 10
     ");
     $stmt->execute([$coord_id]);
@@ -212,13 +253,17 @@ $today_pending   = 0;
 $today_progress  = 0;
 $today_completed = 0;
 $today_mine      = 0;
+$today_new       = 0;
 
 foreach ($today_tasks as $tt) {
     if ($tt['status'] === 'PENDING') $today_pending++;
     elseif ($tt['status'] === 'IN_PROGRESS') $today_progress++;
     elseif ($tt['status'] === 'COMPLETED') $today_completed++;
     if (!empty($tt['is_mine'])) $today_mine++;
+    if (!empty($tt['added_today'])) $today_new++;
 }
+
+$has_extra = count($allowed_section_ids) > ($coord_section_id ? 1 : 0);
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -226,9 +271,14 @@ foreach ($today_tasks as $tt) {
     <a href="create-task.php" class="btn btn-coral"><i class="bi bi-plus-lg"></i> Assign Task</a>
 </div>
 
-<?php if (!$coord_section_id): ?>
+<?php if (empty($allowed_section_ids)): ?>
 <div class="alert alert-warning mb-4">
     No department/section assigned to you. Only your own tasks are shown. Please contact Admin.
+</div>
+<?php elseif ($has_extra): ?>
+<div class="alert alert-info mb-4">
+    <i class="bi bi-info-circle"></i>
+    You can manage <strong>your department</strong> plus <strong><?= count($allowed_section_ids) - 1 ?></strong> extra department(s) granted by Super Admin.
 </div>
 <?php endif; ?>
 
@@ -284,7 +334,7 @@ foreach ($today_tasks as $tt) {
     </div>
 </div>
 
-
+<!-- ========== TODAY'S DAILY TASKS ========== -->
 <div class="card border-0 shadow-sm mb-4 border-start border-4 border-warning">
     <div class="card-header bg-warning bg-opacity-10 d-flex flex-wrap justify-content-between align-items-center gap-2">
         <span class="fw-semibold">
@@ -293,6 +343,9 @@ foreach ($today_tasks as $tt) {
             <small class="text-muted fw-normal">(<?= date('d M Y') ?>)</small>
         </span>
         <div class="d-flex align-items-center gap-2">
+            <?php if ($today_new > 0): ?>
+                <span class="badge bg-warning text-dark"><?= $today_new ?> new today</span>
+            <?php endif; ?>
             <?php if ($today_mine > 0): ?>
                 <span class="badge bg-dark">My tasks: <?= $today_mine ?></span>
             <?php endif; ?>
@@ -348,12 +401,17 @@ foreach ($today_tasks as $tt) {
                     </thead>
                     <tbody>
                         <?php foreach ($today_tasks as $t):
-                            $dayInfo = parseDayLabelDash($t['title'] ?? '');
-                            $isMine  = !empty($t['is_mine']);
+                            $dayInfo    = parseDayLabelDash($t['title'] ?? '');
+                            $isMine     = !empty($t['is_mine']);
+                            $addedToday = !empty($t['added_today']);
+                            $rowClass   = ($addedToday || $isMine) ? 'table-warning' : '';
                         ?>
-                        <tr class="<?= $isMine ? 'table-warning' : '' ?>">
+                        <tr class="<?= $rowClass ?>">
                             <td>
-                                <a href="task-details.php?id=<?= (int)$t['id'] ?>" class="text-decoration-none fw-semibold">
+                                <?php if ($addedToday): ?>
+                                    <span class="badge bg-warning text-dark me-1">NEW</span>
+                                <?php endif; ?>
+                                <a href="task-details.php?id=<?= (int)$t['id'] ?>" class="text-decoration-none fw-semibold text-dark">
                                     <?= e($dayInfo ? $dayInfo['base'] : $t['title']) ?>
                                 </a>
                                 <?php if ($isMine): ?>
@@ -373,7 +431,14 @@ foreach ($today_tasks as $tt) {
                                     <small class="text-muted">(You)</small>
                                 <?php endif; ?>
                             </td>
-                            <td><?= e($t['section_name'] ?? '—') ?></td>
+                            <td>
+                                <?= e($t['section_name'] ?? '—') ?>
+                                <?php if ($coord_section_id && (int)($t['section_id'] ?? 0) === $coord_section_id): ?>
+                                    <span class="badge bg-light text-dark border">My dept</span>
+                                <?php elseif (!empty($t['section_id'])): ?>
+                                    <span class="badge bg-info text-dark">Other dept</span>
+                                <?php endif; ?>
+                            </td>
                             <td><?= priorityBadge($t['priority']) ?></td>
                             <td><?= statusBadge($t['status'], $t['due_date']) ?></td>
                             <td>
@@ -388,7 +453,7 @@ foreach ($today_tasks as $tt) {
     </div>
 </div>
 
-
+<!-- ========== SECTION-WISE TASK BREAKDOWN ========== -->
 <div class="card border-0 shadow-sm mb-4 border-start border-4 border-info">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
         <span class="fw-semibold">
@@ -410,12 +475,20 @@ foreach ($today_tasks as $tt) {
                     $secCompleted = (int)$sec['completed_count'];
                     $secOverdue   = (int)$sec['overdue_count'];
                     $pct = $secTotal > 0 ? round(($secCompleted / $secTotal) * 100) : 0;
+                    $isMyDept = $coord_section_id && (int)$sec['id'] === $coord_section_id;
                 ?>
                 <div class="col-12 col-md-6 col-xl-4">
-                    <div class="card h-100 border">
+                    <div class="card h-100 border <?= $isMyDept ? 'border-warning' : '' ?>">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h6 class="fw-bold mb-0"><?= e($sec['section_name']) ?></h6>
+                                <h6 class="fw-bold mb-0">
+                                    <?= e($sec['section_name']) ?>
+                                    <?php if ($isMyDept): ?>
+                                        <span class="badge bg-warning text-dark">My dept</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-info text-dark">Granted</span>
+                                    <?php endif; ?>
+                                </h6>
                                 <?php if ($secOverdue > 0): ?>
                                     <span class="badge bg-danger"><?= $secOverdue ?> overdue</span>
                                 <?php endif; ?>
@@ -467,7 +540,6 @@ foreach ($today_tasks as $tt) {
 </div>
 
 <div class="row g-4">
-    <!-- Department Agents -->
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between">
@@ -477,7 +549,7 @@ foreach ($today_tasks as $tt) {
             <div class="card-body p-0">
                 <div class="list-group list-group-flush">
                     <?php if (empty($agents)): ?>
-                        <div class="list-group-item text-muted text-center py-4">No agents in your department.</div>
+                        <div class="list-group-item text-muted text-center py-4">No agents in your allowed departments.</div>
                     <?php else: ?>
                         <?php foreach ($agents as $a): ?>
                         <div class="list-group-item d-flex justify-content-between align-items-center">
@@ -494,7 +566,6 @@ foreach ($today_tasks as $tt) {
         </div>
     </div>
 
-    <!-- Recent Tasks -->
     <div class="col-lg-8">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between">
@@ -517,12 +588,17 @@ foreach ($today_tasks as $tt) {
                             <tr><td colspan="5" class="text-center text-muted py-4">No tasks yet</td></tr>
                         <?php else: ?>
                             <?php foreach ($recent as $t):
-                                $dayInfo = parseDayLabelDash($t['title'] ?? '');
-                                $isMine  = !empty($t['is_mine']);
+                                $dayInfo    = parseDayLabelDash($t['title'] ?? '');
+                                $isMine     = !empty($t['is_mine']);
+                                $addedToday = !empty($t['added_today']);
+                                $rowClass   = ($addedToday || $isMine) ? 'table-warning' : '';
                             ?>
-                            <tr class="<?= $isMine ? 'table-warning' : '' ?>">
+                            <tr class="<?= $rowClass ?>">
                                 <td>
-                                    <a href="task-details.php?id=<?= (int)$t['id'] ?>">
+                                    <?php if ($addedToday): ?>
+                                        <span class="badge bg-warning text-dark me-1">NEW</span>
+                                    <?php endif; ?>
+                                    <a href="task-details.php?id=<?= (int)$t['id'] ?>" class="text-dark">
                                         <?= e($dayInfo ? $dayInfo['base'] : $t['title']) ?>
                                     </a>
                                     <?php if ($dayInfo): ?>
