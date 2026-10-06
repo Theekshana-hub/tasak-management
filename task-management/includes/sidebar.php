@@ -53,6 +53,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <i class="bi bi-diagram-3"></i> Sections
                 </a>
             </li>
+                     <li class="nav-item">
+    <a class="nav-link <?php echo $current_page == 'coordinator-permissions.php' ? 'active' : ''; ?>" href="coordinator-permissions.php">
+        <i class="bi bi-key"></i> Coordinator Permissions
+    </a>
+</li>
             <li class="nav-item">
                 <a class="nav-link <?php echo in_array($current_page, ['my-tasks.php','my-task-details.php']) ? 'active' : ''; ?>" href="my-tasks.php">
                     <i class="bi bi-person-check"></i> My Tasks

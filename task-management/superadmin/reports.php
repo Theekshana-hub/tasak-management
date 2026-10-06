@@ -3,7 +3,7 @@ session_start();
 require_once '../config/database.php';
 require_once '../includes/functions.php';
 
-// Auth check
+
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'super_admin') {
     header('Location: ../login.php');
     exit;
@@ -15,7 +15,7 @@ require_once '../includes/sidebar.php';
 
 $pdo = getDB();
 
-// ===== Summary Stats =====
+
 $totalUsers        = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
 $totalAdmins       = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
 $totalCoordinators = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'coordinator'")->fetchColumn();
@@ -29,7 +29,6 @@ $overdueTasks      = $pdo->query("SELECT COUNT(*) FROM tasks WHERE due_date < CU
 
 $completionRate = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100, 1) : 0;
 
-// ===== Chart Data =====
 $by_section = $pdo->query("
     SELECT s.name, COUNT(t.id) AS cnt
     FROM sections s
