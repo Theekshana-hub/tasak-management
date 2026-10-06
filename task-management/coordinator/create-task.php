@@ -7,7 +7,7 @@ require_once '../includes/sidebar.php';
 $pdo = getDB();
 $coord_id = (int)$_SESSION['user_id'];
 
-
+// Current coordinator
 $stmt = $pdo->prepare("SELECT id, name, section_id FROM users WHERE id = ? AND role = 'coordinator' AND status = 'active' LIMIT 1");
 $stmt->execute([$coord_id]);
 $currentCoord = $stmt->fetch();
@@ -17,21 +17,47 @@ if ($currentCoord && $currentCoord['section_id'] !== null) {
     $coord_section_id = (int)$currentCoord['section_id'];
 }
 
-
-$agents = [];
+// ===== Allowed section IDs = own section + super-admin granted =====
+$allowed_section_ids = [];
 if ($coord_section_id) {
+    $allowed_section_ids[] = $coord_section_id;
+}
+
+$acc = $pdo->prepare("SELECT section_id FROM coordinator_section_access WHERE coordinator_id = ?");
+$acc->execute([$coord_id]);
+foreach ($acc->fetchAll(PDO::FETCH_COLUMN) as $sid) {
+    $sid = (int)$sid;
+    if ($sid > 0 && !in_array($sid, $allowed_section_ids, true)) {
+        $allowed_section_ids[] = $sid;
+    }
+}
+
+// ===== Sections dropdown =====
+$sections = [];
+if (!empty($allowed_section_ids)) {
+    $ph = implode(',', array_fill(0, count($allowed_section_ids), '?'));
+    $st = $pdo->prepare("SELECT id, name FROM sections WHERE status = 'active' AND id IN ($ph) ORDER BY name");
+    $st->execute($allowed_section_ids);
+    $sections = $st->fetchAll();
+}
+
+// ===== Agents in all allowed sections =====
+$agents = [];
+if (!empty($allowed_section_ids)) {
+    $ph = implode(',', array_fill(0, count($allowed_section_ids), '?'));
     $stmt = $pdo->prepare("
-        SELECT id, name, section_id 
-        FROM users 
-        WHERE role = 'user' 
-          AND status = 'active' 
-          AND section_id = ?
+        SELECT id, name, section_id
+        FROM users
+        WHERE role = 'user'
+          AND status = 'active'
+          AND section_id IN ($ph)
         ORDER BY name ASC
     ");
-    $stmt->execute([$coord_section_id]);
+    $stmt->execute($allowed_section_ids);
     $agents = $stmt->fetchAll();
 }
 
+// Assignees = Coordinator (self) + agents in allowed sections
 $assignees = [];
 if ($currentCoord) {
     $assignees[] = [
@@ -50,13 +76,7 @@ foreach ($agents as $a) {
     ];
 }
 
-
-$sections = [];
-if ($coord_section_id) {
-    $st = $pdo->prepare("SELECT id, name FROM sections WHERE status = 'active' AND id = ? ORDER BY name");
-    $st->execute([$coord_section_id]);
-    $sections = $st->fetchAll();
-}
+$has_extra_depts = count($allowed_section_ids) > ($coord_section_id ? 1 : 0);
 ?>
 
 <style>
@@ -115,7 +135,7 @@ if ($coord_section_id) {
 
 <div class="card border-0 shadow-sm">
     <div class="card-body">
-        <?php if (!$coord_section_id): ?>
+        <?php if (!$coord_section_id && empty($allowed_section_ids)): ?>
             <div class="alert alert-warning">
                 No section assigned to you. Please contact admin to set your section.
             </div>
@@ -125,13 +145,12 @@ if ($coord_section_id) {
             </div>
         <?php elseif (empty($sections)): ?>
             <div class="alert alert-warning">
-                No section assigned to you. Please contact admin to set your section.
+                No section available. Please contact admin.
             </div>
         <?php else: ?>
         <form method="POST" action="../actions/create-task-coord.php" enctype="multipart/form-data" id="taskForm">
             <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
 
-           
             <div class="row g-3 mb-4">
                 <div class="col-md-4">
                     <label class="form-label">Section <span class="text-danger">*</span></label>
@@ -143,14 +162,23 @@ if ($coord_section_id) {
                         <?php else: ?>
                             <option value="">-- Select Section --</option>
                             <?php foreach ($sections as $s): ?>
-                            <option value="<?php echo (int)$s['id']; ?>"><?php echo e($s['name']); ?></option>
+                            <option value="<?php echo (int)$s['id']; ?>"
+                                <?php echo ($coord_section_id && (int)$s['id'] === $coord_section_id) ? 'selected' : ''; ?>>
+                                <?php echo e($s['name']); ?>
+                                <?php if ($coord_section_id && (int)$s['id'] === $coord_section_id): ?> (My dept)<?php endif; ?>
+                            </option>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </select>
-                    <small class="text-muted">Your assigned section only</small>
+                    <small class="text-muted">
+                        <?php if ($has_extra_depts): ?>
+                            Your department + extra departments granted by Super Admin
+                        <?php else: ?>
+                            Your assigned section only
+                        <?php endif; ?>
+                    </small>
                 </div>
 
-                
                 <div class="col-md-4">
                     <label class="form-label">Assign Type</label>
                     <div class="dropdown">
@@ -205,7 +233,12 @@ if ($coord_section_id) {
                     </div>
                     <small class="text-muted" id="agentHint">
                         Select a section first, then tick people one by one.<br>
-                        You can also assign to <b>yourself</b>. All agents in your department are shown.
+                        You can also assign to <b>yourself</b>.
+                        <?php if ($has_extra_depts): ?>
+                            Agents from your granted departments are also listed.
+                        <?php else: ?>
+                            All agents in your department are shown.
+                        <?php endif; ?>
                     </small>
                 </div>
             </div>
@@ -220,7 +253,6 @@ if ($coord_section_id) {
             </div>
 
             <div id="tasksContainer">
-                <!-- Task #1 -->
                 <div class="task-block border rounded p-3 mb-3 bg-light" data-index="0">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <strong class="task-label">Task #1</strong>
@@ -304,15 +336,13 @@ const assigneeItems   = assigneeBox ? Array.from(assigneeBox.querySelectorAll('.
 
 let taskIndex = 0;
 
-
 function inSection(item, sectionId) {
     if (!sectionId) return false;
     const itemSection = parseInt(item.getAttribute('data-section') || '0');
     const isSelf      = item.getAttribute('data-self') === '1';
-    if (isSelf) return itemSection === 0 || itemSection === sectionId;
+    if (isSelf) return true; // coordinator can always assign to self for any allowed section
     return itemSection === sectionId;
 }
-
 
 function getSelectedRoles() {
     return roleChecks.filter(c => c.checked).map(c => c.value);
@@ -349,7 +379,6 @@ if (roleAll) {
     });
 }
 
-
 function filterAssignees() {
     const sectionId = sectionSelect.value ? parseInt(sectionSelect.value) : 0;
     const roles     = getSelectedRoles();
@@ -371,14 +400,14 @@ function filterAssignees() {
     if (!sectionId) {
         noMatch.textContent = 'Select a section first';
         noMatch.style.display = 'block';
-        agentHint.innerHTML = 'Select a section first, then tick people one by one.<br>You can also assign to <b>yourself</b>. All agents in your department are shown.';
+        agentHint.innerHTML = 'Select a section first, then tick people one by one.<br>You can also assign to <b>yourself</b>.';
     } else if (visible === 0) {
         noMatch.textContent = 'No matching people';
         noMatch.style.display = 'block';
         agentHint.textContent = 'No assignees found for this filter.';
     } else {
         noMatch.style.display = 'none';
-        agentHint.innerHTML = visible + ' person(s) shown. Tick people one by one.<br>You can also assign to <b>yourself</b>. All agents in your department are shown.';
+        agentHint.innerHTML = visible + ' person(s) shown. Tick people one by one.<br>You can also assign to <b>yourself</b>.';
     }
 }
 
@@ -443,11 +472,9 @@ updateRoleButtonText();
 filterAssignees();
 updateSelectedCount();
 
-
 if (sectionSelect && sectionSelect.value) {
     sectionSelect.dispatchEvent(new Event('change'));
 }
-
 
 function calcDueDate(block) {
     const startInput = block.querySelector('.start-date');
