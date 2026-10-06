@@ -58,15 +58,30 @@ if (empty($clean_tasks)) {
 
 $pdo = getDB();
 
-// Coordinator ගේ section එක ගන්නවා
+// ===== Coordinator own section =====
 $stmt = $pdo->prepare("SELECT section_id FROM users WHERE id = ? AND role = 'coordinator' AND status = 'active' LIMIT 1");
 $stmt->execute([$coord_id]);
 $coord_section_id = $stmt->fetchColumn();
 $coord_section_id = ($coord_section_id !== false && $coord_section_id !== null) ? (int)$coord_section_id : null;
 
-// Section validation – coordinator ගේ section එකටම match වෙන්න ඕන
-if (!$coord_section_id || $section_id !== $coord_section_id) {
-    setFlash('danger', 'Invalid section. You can only assign tasks in your own section.');
+// ===== Allowed sections = own + Super Admin granted =====
+$allowed_section_ids = [];
+if ($coord_section_id) {
+    $allowed_section_ids[] = $coord_section_id;
+}
+
+$acc = $pdo->prepare("SELECT section_id FROM coordinator_section_access WHERE coordinator_id = ?");
+$acc->execute([$coord_id]);
+foreach ($acc->fetchAll(PDO::FETCH_COLUMN) as $sid) {
+    $sid = (int)$sid;
+    if ($sid > 0 && !in_array($sid, $allowed_section_ids, true)) {
+        $allowed_section_ids[] = $sid;
+    }
+}
+
+// Section validation – must be in allowed list
+if ($section_id <= 0 || empty($allowed_section_ids) || !in_array($section_id, $allowed_section_ids, true)) {
+    setFlash('danger', 'Invalid section. You can only assign tasks in your allowed departments.');
     redirect('../coordinator/create-task.php');
 }
 
@@ -80,12 +95,12 @@ if (!empty($_FILES['attachment']['name'])) {
 }
 
 $success_count = 0;
+$ph = implode(',', array_fill(0, count($allowed_section_ids), '?'));
 
 foreach ($assigned_to as $user_id) {
     // Allow:
     // 1) Self (coordinator)
-    // 2) Any active agent in the SAME SECTION (department)
-    //    → වෙන coordinator කෙනෙක් add කළ agents ත් allow
+    // 2) Any active agent in ALLOWED sections (own + granted departments)
     $stmt = $pdo->prepare("
         SELECT id, name, role 
         FROM users 
@@ -93,11 +108,12 @@ foreach ($assigned_to as $user_id) {
           AND status = 'active'
           AND (
                 (id = ? AND role = 'coordinator')
-             OR (role = 'user' AND section_id = ?)
+             OR (role = 'user' AND section_id IN ($ph))
           )
         LIMIT 1
     ");
-    $stmt->execute([$user_id, $coord_id, $coord_section_id]);
+    $params = array_merge([$user_id, $coord_id], $allowed_section_ids);
+    $stmt->execute($params);
     $person = $stmt->fetch();
 
     if (!$person) {
@@ -105,7 +121,7 @@ foreach ($assigned_to as $user_id) {
     }
 
     foreach ($clean_tasks as $task) {
-        // Duration දවස් ගණනට එක එක daily task create කරනවා
+        // Duration days → one daily task per day
         for ($i = 0; $i < $task['days']; $i++) {
             $day_date = date('Y-m-d', strtotime($task['start_date'] . " +{$i} days"));
             $day_title = $task['title'];
@@ -156,7 +172,7 @@ foreach ($assigned_to as $user_id) {
 if ($success_count > 0) {
     setFlash('success', "$success_count task(s) assigned successfully. Can be completed day by day.");
 } else {
-    setFlash('danger', 'Could not assign tasks. Check selected people (yourself or agents in your department).');
+    setFlash('danger', 'Could not assign tasks. Check selected people (yourself or agents in your allowed departments).');
 }
 
 redirect('../coordinator/tasks.php');
