@@ -1,8 +1,5 @@
 <?php
-$page_title = 'Edit Task';
 require_once '../includes/coordinator_auth.php';
-require_once '../includes/header.php';
-require_once '../includes/sidebar.php';
 
 $pdo = getDB();
 $coord_id = (int)$_SESSION['user_id'];
@@ -13,28 +10,46 @@ if ($id <= 0) {
     redirect('tasks.php');
 }
 
-
+// Coordinator own section
 $stmt = $pdo->prepare("SELECT section_id FROM users WHERE id = ? AND role = 'coordinator' LIMIT 1");
 $stmt->execute([$coord_id]);
 $coord_section_id = $stmt->fetchColumn();
 $coord_section_id = ($coord_section_id !== false && $coord_section_id !== null) ? (int)$coord_section_id : null;
 
-if (!$coord_section_id) {
+// Allowed sections = own + granted
+$allowed_section_ids = [];
+if ($coord_section_id) {
+    $allowed_section_ids[] = $coord_section_id;
+}
+$acc = $pdo->prepare("SELECT section_id FROM coordinator_section_access WHERE coordinator_id = ?");
+$acc->execute([$coord_id]);
+foreach ($acc->fetchAll(PDO::FETCH_COLUMN) as $sid) {
+    $sid = (int)$sid;
+    if ($sid > 0 && !in_array($sid, $allowed_section_ids, true)) {
+        $allowed_section_ids[] = $sid;
+    }
+}
+
+if (empty($allowed_section_ids)) {
     setFlash('danger', 'No section assigned.');
     redirect('tasks.php');
 }
 
-
+// Load task if in allowed department
+$ph = implode(',', array_fill(0, count($allowed_section_ids), '?'));
 $stmt = $pdo->prepare("
     SELECT t.*
     FROM tasks t
     JOIN users u ON u.id = t.assigned_to
     WHERE t.id = ?
-      AND u.role = 'user'
-      AND (u.section_id = ? OR t.section_id = ?)
+      AND (
+            t.section_id IN ($ph)
+         OR u.section_id IN ($ph)
+      )
     LIMIT 1
 ");
-$stmt->execute([$id, $coord_section_id, $coord_section_id]);
+$params = array_merge([$id], $allowed_section_ids, $allowed_section_ids);
+$stmt->execute($params);
 $task = $stmt->fetch();
 
 if (!$task) {
@@ -42,14 +57,18 @@ if (!$task) {
     redirect('tasks.php');
 }
 
-// Agents in same section
+// Agents in all allowed sections
 $agents_stmt = $pdo->prepare("
-    SELECT id, name FROM users
-    WHERE role = 'user' AND status = 'active' AND section_id = ?
+    SELECT id, name, section_id FROM users
+    WHERE role = 'user' AND status = 'active' AND section_id IN ($ph)
     ORDER BY name
 ");
-$agents_stmt->execute([$coord_section_id]);
+$agents_stmt->execute($allowed_section_ids);
 $agents = $agents_stmt->fetchAll();
+
+$page_title = 'Edit Task';
+require_once '../includes/header.php';
+require_once '../includes/sidebar.php';
 ?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -85,6 +104,7 @@ $agents = $agents_stmt->fetchAll();
                         </option>
                         <?php endforeach; ?>
                     </select>
+                    <small class="text-muted">Agents from your department + granted departments</small>
                 </div>
 
                 <div class="col-md-4">
