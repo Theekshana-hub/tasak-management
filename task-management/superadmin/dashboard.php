@@ -7,7 +7,7 @@ require_once '../includes/sidebar.php';
 $pdo   = getDB();
 $today = date('Y-m-d');
 
-
+/* ===================== HELPERS ===================== */
 
 function parseDayLabelDash($title) {
     if (preg_match('/\(Day\s*(\d+)\s*\/\s*(\d+)\s*[–\-]\s*([^)]+)\)/i', $title ?? '', $m)) {
@@ -58,7 +58,12 @@ function statusBadgeClass($status) {
     };
 }
 
+function isAddedToday($t, $today) {
+    if (empty($t['created_at'])) return false;
+    return date('Y-m-d', strtotime($t['created_at'])) === $today;
+}
 
+/* ===================== COUNTS ===================== */
 
 $total_admins       = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
 $total_coordinators = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'coordinator'")->fetchColumn();
@@ -69,18 +74,20 @@ $in_progress        = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'IN
 $completed          = $pdo->query("SELECT COUNT(*) FROM tasks WHERE status = 'COMPLETED'")->fetchColumn();
 $overdue            = $pdo->query("SELECT COUNT(*) FROM tasks WHERE due_date < CURDATE() AND status NOT IN ('COMPLETED','CANCELLED')")->fetchColumn();
 
-
+/* ===================== TODAY'S TASKS ===================== */
+/* due OR start today — newly created first, all rows yellow */
 
 $stmt = $pdo->prepare("
     SELECT t.*, 
            u.name AS assigned_name, 
            u.role AS assigned_role,
-           s.name AS section_name
+           s.name AS section_name,
+           CASE WHEN DATE(t.created_at) = CURDATE() THEN 1 ELSE 0 END AS added_today
     FROM tasks t
     LEFT JOIN users u ON u.id = t.assigned_to
     LEFT JOIN sections s ON s.id = t.section_id
     WHERE t.due_date = ? OR t.start_date = ?
-    ORDER BY t.status ASC, u.name ASC
+    ORDER BY added_today DESC, t.created_at DESC, t.status ASC, u.name ASC
 ");
 $stmt->execute([$today, $today]);
 $today_tasks = $stmt->fetchAll();
@@ -89,14 +96,16 @@ $today_total     = count($today_tasks);
 $today_pending   = 0;
 $today_progress  = 0;
 $today_completed = 0;
+$today_new       = 0;
 
 foreach ($today_tasks as $tt) {
-    if ($tt['status'] === 'PENDING')       $today_pending++;
+    if ($tt['status'] === 'PENDING')         $today_pending++;
     elseif ($tt['status'] === 'IN_PROGRESS') $today_progress++;
     elseif ($tt['status'] === 'COMPLETED')   $today_completed++;
+    if (!empty($tt['added_today']))          $today_new++;
 }
 
-
+/* ===================== OVERDUE TASKS ===================== */
 
 $overdue_tasks = $pdo->query("
     SELECT t.*, 
@@ -112,20 +121,22 @@ $overdue_tasks = $pdo->query("
     LIMIT 10
 ")->fetchAll();
 
-
+/* ===================== RECENT TASKS ===================== */
 
 $recent = $pdo->query("
     SELECT t.*, 
            u.name AS assigned_name, 
            u.role AS assigned_role,
-           s.name AS section_name
+           s.name AS section_name,
+           CASE WHEN DATE(t.created_at) = CURDATE() THEN 1 ELSE 0 END AS added_today
     FROM tasks t
     LEFT JOIN users u ON u.id = t.assigned_to
     LEFT JOIN sections s ON s.id = t.section_id
-    ORDER BY t.created_at DESC
+    ORDER BY added_today DESC, t.created_at DESC
     LIMIT 8
 ")->fetchAll();
 
+/* ===================== RECENT AGENTS ===================== */
 
 $agents = $pdo->query("
     SELECT u.*, 
@@ -155,6 +166,21 @@ $section_stats = $pdo->query("
     ORDER BY s.name ASC
 ")->fetchAll();
 ?>
+
+<style>
+    /* අද tasks table — සියලු rows කහ */
+    .today-tasks-table tbody tr {
+        background-color: #fff3cd !important;
+    }
+    .today-tasks-table tbody tr:hover {
+        background-color: #ffe69c !important;
+    }
+    /* අද add කළ ඒවා තවත් පැහැදිලි */
+    .today-tasks-table tbody tr.row-new {
+        background-color: #ffecb5 !important;
+        border-left: 4px solid #ffc107;
+    }
+</style>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0"><i class="bi bi-shield-lock"></i> Super Admin Dashboard</h2>
@@ -229,37 +255,42 @@ $section_stats = $pdo->query("
 </div>
 
 <!-- ===== TODAY'S TASKS ===== -->
-<div class="card border-0 shadow-sm mb-4 border-start border-4 border-warning">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <span class="fw-semibold">
+<div class="card border-0 shadow-sm mb-4 border-start border-4 border-warning bg-warning bg-opacity-10">
+    <div class="card-header bg-warning bg-opacity-25 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span class="fw-bold text-dark">
             <i class="bi bi-calendar-day text-warning"></i>
             Today's Tasks
             <small class="text-muted fw-normal">(<?= date('d M Y') ?>)</small>
         </span>
-        <a href="tasks.php" class="small">View All</a>
+        <div class="d-flex align-items-center gap-2">
+            <?php if ($today_new > 0): ?>
+                <span class="badge bg-warning text-dark border border-dark"><?= $today_new ?> new today</span>
+            <?php endif; ?>
+            <a href="tasks.php" class="small fw-semibold text-dark">View All</a>
+        </div>
     </div>
     <div class="card-body">
         <div class="row g-2 mb-3">
             <div class="col-6 col-md-3">
-                <div class="p-2 rounded bg-light text-center">
+                <div class="p-3 rounded bg-white border border-warning text-center shadow-sm">
                     <div class="fs-5 fw-bold"><?= $today_total ?></div>
                     <div class="small text-muted">Total Today</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
-                <div class="p-2 rounded bg-light text-center">
+                <div class="p-3 rounded bg-white border border-warning text-center shadow-sm">
                     <div class="fs-5 fw-bold text-warning"><?= $today_pending ?></div>
                     <div class="small text-muted">Pending</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
-                <div class="p-2 rounded bg-light text-center">
+                <div class="p-3 rounded bg-white border border-warning text-center shadow-sm">
                     <div class="fs-5 fw-bold text-primary"><?= $today_progress ?></div>
                     <div class="small text-muted">In Progress</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
-                <div class="p-2 rounded bg-light text-center">
+                <div class="p-3 rounded bg-white border border-warning text-center shadow-sm">
                     <div class="fs-5 fw-bold text-success"><?= $today_completed ?></div>
                     <div class="small text-muted">Completed</div>
                 </div>
@@ -270,8 +301,8 @@ $section_stats = $pdo->query("
             <p class="text-muted text-center mb-0 py-3">No tasks due today.</p>
         <?php else: ?>
             <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0 align-middle">
-                    <thead>
+                <table class="table table-sm table-hover mb-0 align-middle today-tasks-table">
+                    <thead class="table-warning">
                         <tr>
                             <th>Task</th>
                             <th>Day</th>
@@ -284,12 +315,17 @@ $section_stats = $pdo->query("
                     </thead>
                     <tbody>
                         <?php foreach ($today_tasks as $t):
-                            $dayInfo = parseDayLabelDash($t['title'] ?? '');
-                            $isToday = (!empty($t['due_date']) && $t['due_date'] === $today);
-                            $aRole   = $t['assigned_role'] ?? '';
+                            $dayInfo    = parseDayLabelDash($t['title'] ?? '');
+                            $aRole      = $t['assigned_role'] ?? '';
+                            $addedToday = !empty($t['added_today']);
                         ?>
-                        <tr class="<?= $isToday ? 'table-warning' : '' ?>">
-                            <td class="fw-semibold"><?= e($dayInfo ? $dayInfo['base'] : ($t['title'] ?? '-')) ?></td>
+                        <tr class="<?= $addedToday ? 'row-new' : '' ?>">
+                            <td class="fw-semibold">
+                                <?php if ($addedToday): ?>
+                                    <span class="badge bg-warning text-dark border border-dark me-1">NEW</span>
+                                <?php endif; ?>
+                                <?= e($dayInfo ? $dayInfo['base'] : ($t['title'] ?? '-')) ?>
+                            </td>
                             <td>
                                 <?php if ($dayInfo): ?>
                                     <span class="badge bg-primary">Day <?= $dayInfo['day'] ?>/<?= $dayInfo['total'] ?></span>
@@ -436,7 +472,7 @@ $section_stats = $pdo->query("
                             $dayInfo = parseDayLabelDash($t['title'] ?? '');
                             $aRole   = $t['assigned_role'] ?? '';
                         ?>
-                        <tr>
+                        <tr class="table-danger">
                             <td class="fw-semibold"><?= e($dayInfo ? $dayInfo['base'] : ($t['title'] ?? '-')) ?></td>
                             <td><?= e($t['assigned_name'] ?? '-') ?></td>
                             <td>
@@ -515,18 +551,18 @@ $section_stats = $pdo->query("
                             <tr><td colspan="6" class="text-center text-muted py-4">No tasks yet</td></tr>
                         <?php else: ?>
                             <?php foreach ($recent as $t):
-                                $dayInfo       = parseDayLabelDash($t['title'] ?? '');
-                                $isTodayRecent = (!empty($t['due_date']) && $t['due_date'] === $today);
-                                $aRole         = $t['assigned_role'] ?? '';
+                                $dayInfo    = parseDayLabelDash($t['title'] ?? '');
+                                $aRole      = $t['assigned_role'] ?? '';
+                                $addedToday = !empty($t['added_today']);
                             ?>
-                            <tr class="<?= $isTodayRecent ? 'table-warning' : '' ?>">
+                            <tr class="<?= $addedToday ? 'table-warning' : '' ?>">
                                 <td>
+                                    <?php if ($addedToday): ?>
+                                        <span class="badge bg-warning text-dark me-1">NEW</span>
+                                    <?php endif; ?>
                                     <?= e($dayInfo ? $dayInfo['base'] : ($t['title'] ?? '-')) ?>
                                     <?php if ($dayInfo): ?>
                                         <span class="badge bg-primary ms-1">Day <?= $dayInfo['day'] ?>/<?= $dayInfo['total'] ?></span>
-                                    <?php endif; ?>
-                                    <?php if ($isTodayRecent): ?>
-                                        <span class="badge bg-warning text-dark ms-1">Today</span>
                                     <?php endif; ?>
                                 </td>
                                 <td><?= e($t['assigned_name'] ?? '-') ?></td>
