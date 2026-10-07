@@ -4,6 +4,9 @@ require_once '../includes/auth.php';
 require_once '../includes/header.php';
 require_once '../includes/sidebar.php';
 
+// Sri Lanka timezone so "today" is always correct
+date_default_timezone_set('Asia/Colombo');
+
 $pdo     = getDB();
 $user_id = (int)$_SESSION['user_id'];
 $today   = date('Y-m-d');
@@ -21,6 +24,9 @@ if ($status_filter === 'OVERDUE') {
     $where .= " AND t.status = ?";
     $params[] = $status_filter;
 }
+
+// The ORDER BY placeholder comes after the WHERE placeholders, so add it last
+$params[] = $today;
 
 $sql = "
     SELECT
@@ -41,6 +47,10 @@ $sql = "
     LEFT JOIN users u ON u.id = t.created_by
     WHERE $where
     ORDER BY
+        CASE
+            WHEN t.due_date = ? AND t.status NOT IN ('COMPLETED','CANCELLED') THEN 0
+            ELSE 1
+        END ASC,
         FIELD(t.priority, 'URGENT', 'HIGH', 'MEDIUM', 'LOW'),
         t.due_date IS NULL,
         t.due_date ASC,
@@ -75,6 +85,16 @@ $overdue_stmt = $pdo->prepare("
 $overdue_stmt->execute([$user_id, $today]);
 $overdue_count = (int)$overdue_stmt->fetchColumn();
 
+// Due today count
+$today_stmt = $pdo->prepare("
+    SELECT COUNT(*) FROM tasks
+    WHERE assigned_to = ?
+      AND due_date = ?
+      AND status NOT IN ('COMPLETED','CANCELLED')
+");
+$today_stmt->execute([$user_id, $today]);
+$today_count = (int)$today_stmt->fetchColumn();
+
 if (!function_exists('statusBadgeLocal')) {
     function statusBadgeLocal($status) {
         $map = [
@@ -102,9 +122,22 @@ if (!function_exists('priorityBadgeLocal')) {
 }
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
     <h2 class="mb-0"><i class="bi bi-person-check"></i> My Tasks</h2>
+
+    <!-- Today's date -->
+    <div class="bg-white border rounded-pill shadow-sm px-3 py-2 d-flex align-items-center gap-2">
+        <i class="bi bi-calendar-event text-danger"></i>
+        <span class="fw-semibold"><?= date('l, d M Y') ?></span>
+    </div>
 </div>
+
+<?php if ($today_count > 0): ?>
+<div class="alert alert-warning d-flex align-items-center gap-2">
+    <i class="bi bi-alarm fs-5"></i>
+    <div>You have <strong><?= $today_count ?></strong> task<?= $today_count > 1 ? 's' : '' ?> due today.</div>
+</div>
+<?php endif; ?>
 
 <?php if (isset($_GET['updated'])): ?>
 <div class="alert alert-success alert-dismissible fade show">
@@ -192,8 +225,14 @@ if (!function_exists('priorityBadgeLocal')) {
                                 && $task['due_date'] < $today
                                 && !in_array($task['status'], ['COMPLETED', 'CANCELLED'], true)
                             );
+                            $isToday = (
+                                !empty($task['due_date'])
+                                && $task['due_date'] === $today
+                                && !in_array($task['status'], ['COMPLETED', 'CANCELLED'], true)
+                            );
+                            $rowClass = $isOverdue ? 'table-danger' : ($isToday ? 'table-warning' : '');
                         ?>
-                        <tr class="<?= $isOverdue ? 'table-danger' : '' ?>">
+                        <tr class="<?= $rowClass ?>">
                             <td><?= $i + 1 ?></td>
                             <td>
                                 <a href="my-task-details.php?id=<?= (int)$task['id'] ?>" class="text-decoration-none fw-semibold">
@@ -201,6 +240,9 @@ if (!function_exists('priorityBadgeLocal')) {
                                 </a>
                                 <?php if (!empty($task['attachment'])): ?>
                                     <i class="bi bi-paperclip text-muted ms-1" title="Has attachment"></i>
+                                <?php endif; ?>
+                                <?php if ($isToday): ?>
+                                    <span class="badge bg-warning text-dark ms-1">Today</span>
                                 <?php endif; ?>
                                 <?php if ($isOverdue): ?>
                                     <span class="badge bg-danger ms-1">Overdue</span>
@@ -228,7 +270,7 @@ if (!function_exists('priorityBadgeLocal')) {
                             <td><?= $task['start_date'] ? date('d M Y', strtotime($task['start_date'])) : '—' ?></td>
                             <td>
                                 <?php if ($task['due_date']): ?>
-                                    <span class="<?= $isOverdue ? 'text-danger fw-bold' : '' ?>">
+                                    <span class="<?= $isOverdue ? 'text-danger fw-bold' : ($isToday ? 'fw-bold' : '') ?>">
                                         <?= date('d M Y', strtotime($task['due_date'])) ?>
                                     </span>
                                 <?php else: ?>
