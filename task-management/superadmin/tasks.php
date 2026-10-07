@@ -1,6 +1,6 @@
 <?php
 $page_title = 'All Tasks';
-require_once '../includes/admin_auth.php';
+require_once '../includes/super_admin_auth.php';
 require_once '../includes/header.php';
 require_once '../includes/sidebar.php';
 
@@ -10,7 +10,7 @@ $search      = trim($_GET['search'] ?? '');
 $section     = $_GET['section'] ?? '';
 $user        = $_GET['user'] ?? '';
 $assigned_by = $_GET['assigned_by'] ?? '';
-$status      = strtoupper($_GET['status'] ?? '');  
+$status      = strtoupper($_GET['status'] ?? '');
 $priority    = $_GET['priority'] ?? '';
 $day_group   = $_GET['day_group'] ?? '';
 
@@ -27,7 +27,6 @@ function parseDayLabel($title) {
     }
     return null;
 }
-
 
 $sql = "SELECT t.*,
                COALESCE(u.name, '—')  AS assigned_name,
@@ -60,7 +59,6 @@ if ($assigned_by !== '') {
     $params[] = (int)$assigned_by;
 }
 
-
 if ($status === 'OVERDUE') {
     $sql .= " AND t.due_date < ? AND t.status NOT IN ('COMPLETED', 'CANCELLED')";
     $params[] = $today;
@@ -74,7 +72,13 @@ if ($priority !== '') {
     $params[] = $priority;
 }
 
-$sql .= " ORDER BY (t.due_date IS NULL) ASC, t.due_date ASC, t.id DESC";
+// අද add කළ ඒවා උඩින්, ඊට පස්සේ due date
+$sql .= " ORDER BY
+            CASE WHEN DATE(t.created_at) = CURDATE() THEN 0 ELSE 1 END ASC,
+            t.created_at DESC,
+            (t.due_date IS NULL) ASC,
+            t.due_date ASC,
+            t.id DESC";
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -82,6 +86,7 @@ $all_tasks = $stmt->fetchAll();
 
 $group_counts = ['1' => 0, '3' => 0, '5' => 0, '7' => 0, '14' => 0, 'other' => 0];
 $tasks = [];
+$today_added_count = 0;
 
 foreach ($all_tasks as $t) {
     $info = parseDayLabel($t['title'] ?? '');
@@ -95,6 +100,11 @@ foreach ($all_tasks as $t) {
         $total_key = $total;
     }
 
+    $created = !empty($t['created_at']) ? date('Y-m-d', strtotime($t['created_at'])) : '';
+    if ($created === $today) {
+        $today_added_count++;
+    }
+
     if ($day_group === '') {
         $tasks[] = $t;
     } elseif ($day_group === 'other' && $total_key === 'other') {
@@ -105,11 +115,14 @@ foreach ($all_tasks as $t) {
 }
 
 $sections = $pdo->query("SELECT id, name FROM sections WHERE status='active' ORDER BY name")->fetchAll();
-
 $users = $pdo->query("SELECT id, name, section_id FROM users WHERE role='user' AND status='active' ORDER BY name")->fetchAll();
 
-// FIX: super_admin la ath "Assigned By" dropdown ekata add kala
-$assigners_raw = $pdo->query("SELECT id, name, role FROM users WHERE role IN ('super_admin','admin','coordinator') AND status='active' ORDER BY FIELD(role,'super_admin','admin','coordinator'), name")->fetchAll();
+$assigners_raw = $pdo->query("
+    SELECT id, name, role FROM users
+    WHERE role IN ('super_admin','admin','coordinator') AND status='active'
+    ORDER BY FIELD(role,'super_admin','admin','coordinator'), name
+")->fetchAll();
+
 $assigners = [];
 foreach ($assigners_raw as $a) {
     $section_ids = [];
@@ -161,6 +174,11 @@ if (!function_exists('taskIsOverdue')) {
     }
 }
 
+function isAddedTodayRow($t, $today) {
+    if (empty($t['created_at'])) return false;
+    return date('Y-m-d', strtotime($t['created_at'])) === $today;
+}
+
 function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $status, $priority) {
     $q = [];
     if ($group !== '') $q['day_group'] = $group;
@@ -189,6 +207,15 @@ function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $statu
     <h2 class="mb-0"><i class="bi bi-list-task"></i> All Tasks</h2>
     <a href="create-task.php" class="btn btn-coral"><i class="bi bi-plus-lg"></i> Create Task</a>
 </div>
+
+<?php if ($today_added_count > 0): ?>
+<div class="alert alert-warning border-warning d-flex align-items-center gap-2 mb-3">
+    <i class="bi bi-sun-fill fs-5"></i>
+    <div>
+        <strong><?php echo $today_added_count; ?></strong> task(s) added today — shown at the top and highlighted in yellow.
+    </div>
+</div>
+<?php endif; ?>
 
 <?php if (isset($_GET['deleted'])): ?>
 <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -371,6 +398,12 @@ function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $statu
 </form>
 
 <div class="card border-0 shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold"><i class="bi bi-table"></i> Tasks (<?php echo count($tasks); ?>)</span>
+        <?php if ($today_added_count > 0): ?>
+            <span class="badge bg-warning text-dark"><?php echo $today_added_count; ?> added today</span>
+        <?php endif; ?>
+    </div>
     <div class="table-responsive">
         <table class="table table-hover mb-0 align-middle task-table">
             <thead>
@@ -389,20 +422,32 @@ function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $statu
             </thead>
             <tbody>
                 <?php foreach ($tasks as $t):
-                    $dayInfo   = parseDayLabel($t['title'] ?? '');
-                    $overdue   = taskIsOverdue($t['due_date'], $t['status']);
-                    $isToday   = (!empty($t['due_date']) && $t['due_date'] === $today);
+                    $dayInfo    = parseDayLabel($t['title'] ?? '');
+                    $overdue    = taskIsOverdue($t['due_date'], $t['status']);
+                    $addedToday = isAddedTodayRow($t, $today);
+                    $isDueToday = (!empty($t['due_date']) && $t['due_date'] === $today);
+
+                    // Yellow = added today; red = overdue (and not today-added priority)
+                    $rowClass = '';
+                    if ($addedToday) {
+                        $rowClass = 'table-warning';
+                    } elseif ($overdue) {
+                        $rowClass = 'table-danger';
+                    }
                 ?>
-                <tr class="<?php echo $overdue ? 'table-danger' : ($isToday ? 'table-warning' : ''); ?>">
+                <tr class="<?php echo $rowClass; ?>">
                     <td class="date-col"><?php echo taskDate($t['created_at'] ?? null); ?></td>
                     <td>
-                        <a href="task-details.php?id=<?php echo (int)$t['id']; ?>" class="text-decoration-none fw-medium">
+                        <?php if ($addedToday): ?>
+                            <span class="badge bg-warning text-dark me-1">NEW</span>
+                        <?php endif; ?>
+                        <a href="task-details.php?id=<?php echo (int)$t['id']; ?>" class="text-decoration-none fw-medium text-dark">
                             <?php echo e($dayInfo ? $dayInfo['base'] : $t['title']); ?>
                         </a>
-                        <?php if ($isToday): ?>
+                        <?php if ($isDueToday && !$addedToday): ?>
                             <span class="badge bg-warning text-dark ms-1">Today</span>
                         <?php endif; ?>
-                        <?php if ($overdue): ?>
+                        <?php if ($overdue && !$addedToday): ?>
                             <span class="badge bg-danger ms-1">Overdue</span>
                         <?php endif; ?>
                     </td>
@@ -432,10 +477,10 @@ function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $statu
                     </td>
                     <td><?php echo priorityBadge($t['priority']); ?></td>
                     <td class="date-col">
-                        <span class="<?php echo $overdue ? 'text-danger fw-semibold' : ''; ?>">
+                        <span class="<?php echo ($overdue && !$addedToday) ? 'text-danger fw-semibold' : ''; ?>">
                             <?php echo taskDate($t['due_date'] ?? $t['start_date'] ?? null); ?>
                         </span>
-                        <?php if ($overdue): ?>
+                        <?php if ($overdue && !$addedToday): ?>
                             <i class="bi bi-exclamation-triangle-fill text-danger" title="Overdue"></i>
                         <?php endif; ?>
                     </td>
@@ -498,7 +543,6 @@ function dayGroupUrlAdmin($group, $search, $section, $user, $assigned_by, $statu
                 opt.hidden = false;
                 return;
             }
-            // admin & super_admin always visible
             if (role === 'admin' || role === 'super_admin') {
                 opt.hidden = false;
                 return;
